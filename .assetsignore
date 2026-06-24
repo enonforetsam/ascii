@@ -1,0 +1,15 @@
+.git
+.wrangler
+.dev.vars
+.github
+.gitignore
+.assetsignore
+worker.js
+node_modules
+tests
+package.json
+package-lock.json
+PLAN.md
+README.md
+docs
+.DS_Store

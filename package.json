@@ -1,0 +1,12 @@
+{
+  "name": "ascii",
+  "version": "0.0.1",
+  "private": true,
+  "description": "everything is characters — a text-native generative art instrument",
+  "scripts": {
+    "dev": "npx wrangler dev",
+    "deploy": "npx wrangler deploy",
+    "deploy:staging": "npx wrangler deploy --env staging",
+    "test": "node --test tests/*.test.js"
+  }
+}

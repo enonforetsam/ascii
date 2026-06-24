@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ASCII — everything is characters</title>
+<meta name="description" content="ASCII is a text-native generative art instrument. Where Fluid renders pixels, ASCII renders characters — a phosphor-green CRT terminal where everything is glyphs.">
+<meta name="theme-color" content="#05080a">
+<meta property="og:title" content="ASCII — everything is characters">
+<meta property="og:description" content="A text-native generative art instrument. Everything is characters.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ascii.krackeddevs.com/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305080a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='22' font-weight='700' text-anchor='middle' fill='%2339ff7a'%3E%3E%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#05080a;
+    --ink:#39ff7a;
+    --ink-dim:#1f8f47;
+    --ink-faint:rgba(57,255,122,.34);
+    --glow:0 0 4px rgba(57,255,122,.55), 0 0 12px rgba(57,255,122,.28);
+    --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--mono);
+    overflow:hidden;
+    position:relative;
+    text-shadow:var(--glow);
+  }
+
+  /* living centerpiece: matrix rain on a measured monospace grid */
+  #rain{
+    position:fixed;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    z-index:0;
+  }
+
+  /* foreground UI sits above the rain, dimmed by a soft radial vignette */
+  .ui{
+    position:relative;
+    z-index:2;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    pointer-events:none;
+  }
+
+  .terminal{
+    border:1px solid var(--ink-faint);
+    background:rgba(5,8,10,.62);
+    backdrop-filter:blur(1.5px);
+    padding:28px 40px;
+    text-align:center;
+    box-shadow:0 0 0 1px rgba(57,255,122,.06), 0 0 40px rgba(0,0,0,.6) inset;
+  }
+
+  .wordmark{
+    font-size:clamp(40px,12vw,92px);
+    font-weight:700;
+    letter-spacing:.14em;
+    line-height:1;
+    text-shadow:0 0 6px rgba(57,255,122,.7), 0 0 22px rgba(57,255,122,.4);
+  }
+  .cursor{
+    display:inline-block;
+    width:.62em;
+    height:.92em;
+    margin-left:.12em;
+    vertical-align:-.06em;
+    background:var(--ink);
+    box-shadow:var(--glow);
+    animation:blink 1.05s steps(1,end) infinite;
+  }
+  @keyframes blink{50%{opacity:0}}
+
+  .tagline{
+    margin-top:14px;
+    font-size:clamp(11px,2.6vw,15px);
+    letter-spacing:.42em;
+    text-transform:uppercase;
+    color:var(--ink);
+    opacity:.82;
+  }
+
+  footer{
+    position:fixed;
+    left:0;right:0;bottom:0;
+    z-index:2;
+    display:flex;
+    justify-content:space-between;
+    gap:16px;
+    padding:12px 16px;
+    font-size:11px;
+    letter-spacing:.16em;
+    color:var(--ink-faint);
+    text-shadow:none;
+    pointer-events:none;
+  }
+  footer span{white-space:nowrap}
+
+  /* scanline overlay */
+  .scanlines{
+    position:fixed;
+    inset:0;
+    z-index:3;
+    pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.16) 3px,
+      rgba(0,0,0,.16) 4px
+    );
+    mix-blend-mode:multiply;
+    opacity:.7;
+  }
+  /* subtle vignette */
+  .vignette{
+    position:fixed;
+    inset:0;
+    z-index:1;
+    pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 50%,
+      rgba(5,8,10,0) 38%,
+      rgba(5,8,10,.55) 78%,
+      rgba(5,8,10,.92) 100%);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .cursor{animation:none}
+  }
+  @media (max-width:480px){
+    footer{font-size:10px;letter-spacing:.08em}
+  }
+</style>
+</head>
+<body>
+<canvas id="rain" aria-hidden="true"></canvas>
+<div class="vignette"></div>
+
+<main class="ui">
+  <div class="terminal" role="banner">
+    <div class="wordmark">ASCII<span class="cursor" aria-hidden="true"></span></div>
+    <div class="tagline">everything is characters</div>
+  </div>
+</main>
+
+<footer>
+  <span>M0 · skeleton — M1 brings the donut</span>
+  <span>ascii.krackeddevs.com</span>
+</footer>
+
+<div class="scanlines" aria-hidden="true"></div>
+
+<script>
+  (function () {
+    var canvas = document.getElementById('rain');
+    var ctx = canvas.getContext('2d');
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // glyph palette — katakana-ish slashes, brackets and symbols read as "code rain"
+    var GLYPHS = '01<>{}[]()/\\|=+*#@$%&ABCDEFGHJKLMNPQRSTUVWXYZ:;.,abcdefghijkmnopqrstuvwxyz';
+    var FONT_SIZE = 16;           // logical px per cell (scaled for DPR below)
+    var dpr = 1;
+    var cols = 0, rows = 0;
+    var drops = [];               // head row position per column (float)
+    var speed = [];               // fall speed per column
+
+    function rand(n) { return Math.floor(Math.random() * n); }
+    function glyph() { return GLYPHS.charAt(rand(GLYPHS.length)); }
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.font = '700 ' + FONT_SIZE + 'px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+      ctx.textBaseline = 'top';
+
+      cols = Math.ceil(w / FONT_SIZE);
+      rows = Math.ceil(h / FONT_SIZE);
+
+      drops = new Array(cols);
+      speed = new Array(cols);
+      for (var i = 0; i < cols; i++) {
+        drops[i] = Math.random() * -rows;          // stagger the start above the top
+        speed[i] = 0.35 + Math.random() * 0.55;     // cells per frame
+      }
+    }
+
+    // Paint one full frame of the rain. `trail` toggles the fade-trail draw used
+    // by the animated path; the static (reduced-motion) frame draws solid columns.
+    function frame() {
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+
+      // translucent wipe leaves a fading green trail behind each head
+      ctx.fillStyle = 'rgba(5,8,10,0.14)';
+      ctx.fillRect(0, 0, w, h);
+
+      for (var i = 0; i < cols; i++) {
+        var x = i * FONT_SIZE;
+        var headY = drops[i] * FONT_SIZE;
+
+        // bright leading glyph
+        ctx.fillStyle = '#caffdd';
+        ctx.shadowColor = 'rgba(57,255,122,0.9)';
+        ctx.shadowBlur = 8;
+        ctx.fillText(glyph(), x, headY);
+
+        // a couple of dimmer trailing glyphs for body
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(57,255,122,0.62)';
+        ctx.fillText(glyph(), x, headY - FONT_SIZE);
+        ctx.fillStyle = 'rgba(57,255,122,0.30)';
+        ctx.fillText(glyph(), x, headY - FONT_SIZE * 2);
+
+        drops[i] += speed[i];
+        // recycle the column once its head falls off the bottom
+        if (headY > h + FONT_SIZE * 3 && Math.random() > 0.975) {
+          drops[i] = -Math.random() * 6;
+          speed[i] = 0.35 + Math.random() * 0.55;
+        }
+      }
+    }
+
+    // A single, motionless composed frame for reduced-motion users: fill the
+    // whole grid with low-glow glyphs and a few bright heads. No rAF loop.
+    function staticFrame() {
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      ctx.fillStyle = '#05080a';
+      ctx.fillRect(0, 0, w, h);
+      ctx.shadowBlur = 0;
+      for (var c = 0; c < cols; c++) {
+        var lit = rand(rows);
+        for (var r = 0; r < rows; r++) {
+          var dist = r - lit;
+          if (dist === 0) {
+            ctx.fillStyle = '#caffdd';
+          } else if (dist > 0 && dist < 6) {
+            ctx.fillStyle = 'rgba(57,255,122,' + (0.5 - dist * 0.07).toFixed(2) + ')';
+          } else {
+            ctx.fillStyle = 'rgba(57,255,122,0.10)';
+          }
+          ctx.fillText(glyph(), c * FONT_SIZE, r * FONT_SIZE);
+        }
+      }
+    }
+
+    var rafId = 0;
+    function loop() {
+      frame();
+      rafId = window.requestAnimationFrame(loop);
+    }
+
+    function start() {
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+      resize();
+      // prime the background once so the first frames aren't a flash
+      ctx.fillStyle = '#05080a';
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      if (reduce) {
+        staticFrame();
+      } else {
+        loop();
+      }
+    }
+
+    var resizeTimer = 0;
+    window.addEventListener('resize', function () {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(start, 150);
+    });
+
+    start();
+  })();
+</script>
+</body>
+</html>
