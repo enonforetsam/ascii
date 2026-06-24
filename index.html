@@ -13,12 +13,39 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305080a'/%3E%3Ctext x='16' y='23' font-family='monospace' font-size='22' font-weight='700' text-anchor='middle' fill='%2339ff7a'%3E%3E%3C/text%3E%3C/svg%3E">
 <style>
   :root{
-    --bg:#05080a;
-    --ink:#39ff7a;
-    --ink-dim:#1f8f47;
-    --ink-faint:rgba(57,255,122,.34);
-    --glow:0 0 4px rgba(57,255,122,.55), 0 0 12px rgba(57,255,122,.28);
     --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    /* ---- theme tokens (phosphor default). Each theme sets only --bg/--bg-rgb
+       and --ink/--ink-rgb (+ a couple of overrides); ALL chrome colours derive
+       from those, so swapping a theme recolours the whole instrument — not just
+       the canvas glyphs. ---- */
+    --bg:#05080a;  --bg-rgb:5,8,10;
+    --ink:#39ff7a; --ink-rgb:57,255,122;
+    --ink-dim:#1f8f47;
+    --glow:0 0 4px rgba(var(--ink-rgb),.55), 0 0 12px rgba(var(--ink-rgb),.28);
+    --ctl-glow:0 0 8px rgba(var(--ink-rgb),.35);
+    --scan-op:.7;
+    /* derived — re-resolve automatically when --ink-rgb / --bg-rgb change */
+    --ink-faint:rgba(var(--ink-rgb),.34);
+    --tab-bg:rgba(var(--ink-rgb),.06);
+    --tab-bg-hover:rgba(var(--ink-rgb),.16);
+    --tab-bg-on:rgba(var(--ink-rgb),.24);
+  }
+  body[data-theme="amber"]{
+    --bg:#0a0600;  --bg-rgb:10,6,0;
+    --ink:#ffb026; --ink-rgb:255,176,38;
+    --ink-dim:#b87d1a;
+    --scan-op:.6;
+  }
+  body[data-theme="paper"]{
+    --bg:#e7e8e2;  --bg-rgb:231,232,226;
+    --ink:#13271b; --ink-rgb:19,39,27;
+    --ink-dim:#3a5244;
+    --glow:none;
+    --ctl-glow:none;
+    --scan-op:.16;
+    --tab-bg:rgba(var(--ink-rgb),.05);
+    --tab-bg-hover:rgba(var(--ink-rgb),.12);
+    --tab-bg-on:rgba(var(--ink-rgb),.18);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -46,15 +73,9 @@
     z-index:1;
     pointer-events:none;
     background:radial-gradient(120% 100% at 50% 50%,
-      rgba(5,8,10,0) 42%,
-      rgba(5,8,10,.45) 80%,
-      rgba(5,8,10,.9) 100%);
-  }
-  body.paper .vignette{
-    background:radial-gradient(120% 100% at 50% 50%,
-      rgba(228,230,224,0) 42%,
-      rgba(228,230,224,.35) 82%,
-      rgba(228,230,224,.78) 100%);
+      rgba(var(--bg-rgb),0) 42%,
+      rgba(var(--bg-rgb),.45) 80%,
+      rgba(var(--bg-rgb),.9) 100%);
   }
 
   /* compact top bar — the wordmark shrunk from the M0 splash */
@@ -66,21 +87,17 @@
     align-items:center;
     gap:14px;
     padding:9px 14px;
-    background:linear-gradient(to bottom, rgba(5,8,10,.82), rgba(5,8,10,.5) 70%, rgba(5,8,10,0));
-  }
-  body.paper .topbar{
-    background:linear-gradient(to bottom, rgba(228,230,224,.86), rgba(228,230,224,.5) 70%, rgba(228,230,224,0));
+    background:linear-gradient(to bottom, rgba(var(--bg-rgb),.82), rgba(var(--bg-rgb),.5) 70%, rgba(var(--bg-rgb),0));
   }
   h1.wordmark{
     font-size:18px;
     font-weight:700;
     letter-spacing:.16em;
     line-height:1;
-    text-shadow:0 0 6px rgba(57,255,122,.7), 0 0 18px rgba(57,255,122,.4);
+    text-shadow:var(--glow);
     white-space:nowrap;
     flex:0 0 auto;
   }
-  body.paper h1.wordmark{ text-shadow:none; }
   .wordmark .blip{
     display:inline-block;
     width:.5em;height:.86em;
@@ -90,7 +107,6 @@
     box-shadow:var(--glow);
     animation:blink 1.05s steps(1,end) infinite;
   }
-  body.paper .wordmark .blip{ box-shadow:none; }
   @keyframes blink{50%{opacity:0}}
   .sub{
     font-size:10px;
@@ -133,7 +149,7 @@
     font-size:12px;
     letter-spacing:.06em;
     color:var(--ink);
-    background:rgba(57,255,122,.05);
+    background:var(--tab-bg);
     border:1px solid var(--ink-faint);
     min-height:32px;
     min-width:32px;
@@ -143,16 +159,12 @@
     border-radius:2px;
     transition:background .12s, border-color .12s;
   }
-  body.paper .tab, body.paper .btn{
-    color:var(--ink); background:rgba(31,143,71,.07);
-  }
-  .tab:hover, .btn:hover{ background:rgba(57,255,122,.16); }
+  .tab:hover, .btn:hover{ background:var(--tab-bg-hover); }
   .tab[aria-pressed="true"]{
-    background:rgba(57,255,122,.24);
+    background:var(--tab-bg-on);
     border-color:var(--ink);
-    box-shadow:0 0 8px rgba(57,255,122,.35);
+    box-shadow:var(--ctl-glow);
   }
-  body.paper .tab[aria-pressed="true"]{ box-shadow:none; background:rgba(31,143,71,.28); }
 
   select{
     appearance:none;
@@ -160,7 +172,7 @@
     font-family:var(--mono);
     font-size:12px;
     color:var(--ink);
-    background:rgba(57,255,122,.05);
+    background:var(--tab-bg);
     border:1px solid var(--ink-faint);
     min-height:32px;
     padding:0 26px 0 9px;
@@ -172,7 +184,6 @@
     background-size:5px 5px,5px 5px;
     background-repeat:no-repeat;
   }
-  body.paper select{ color:var(--ink); }
 
   /* sliders */
   .slider{
@@ -218,16 +229,14 @@
     margin-top:-5px;
     border-radius:50%;
     background:var(--ink);
-    box-shadow:0 0 6px rgba(57,255,122,.7);
+    box-shadow:var(--ctl-glow);
   }
-  body.paper input[type="range"]::-webkit-slider-thumb{ box-shadow:none; }
   input[type="range"]::-moz-range-thumb{
     width:12px;height:12px;
     border:none;border-radius:50%;
     background:var(--ink);
-    box-shadow:0 0 6px rgba(57,255,122,.7);
+    box-shadow:var(--ctl-glow);
   }
-  body.paper input[type="range"]::-moz-range-thumb{ box-shadow:none; }
 
   /* uniform, always-visible focus ring */
   .tab:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible{
@@ -275,9 +284,8 @@
       rgba(0,0,0,.16) 4px
     );
     mix-blend-mode:multiply;
-    opacity:.7;
+    opacity:var(--scan-op);
   }
-  body.paper .scanlines{ opacity:.28; }
 
   @media (prefers-reduced-motion: reduce){
     .wordmark .blip{animation:none}
@@ -814,7 +822,7 @@
   /* ---------- colour mode application (body class for CSS) ---------- */
 
   function applyColour() {
-    document.body.classList.toggle('paper', COLOURS[state.colour].paper);
+    document.body.dataset.theme = state.colour;
     document.querySelector('meta[name="theme-color"]')
       .setAttribute('content', COLOURS[state.colour].bg);
     atlasDirty = true;
