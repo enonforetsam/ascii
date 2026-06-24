@@ -187,6 +187,14 @@
     opacity:.62;
     white-space:nowrap;
   }
+  .slider .val{
+    font-size:11px;
+    font-variant-numeric:tabular-nums;
+    min-width:2.4em;
+    text-align:right;
+    opacity:.82;
+    white-space:nowrap;
+  }
   input[type="range"]{
     -webkit-appearance:none;
     appearance:none;
@@ -299,41 +307,44 @@
     </div>
 
     <div class="group">
-      <label class="lab" for="sel-charset">Charset</label>
-      <select id="sel-charset" aria-label="Character ramp">
-        <option value="standard">standard</option>
-        <option value="blocks">blocks</option>
-        <option value="dots">dots</option>
-        <option value="binary">binary</option>
-        <option value="donut">donut</option>
-      </select>
+      <span class="lab" id="lab-charset">Charset</span>
+      <div class="tabs seg ramp" id="seg-charset" role="group" aria-labelledby="lab-charset">
+        <button class="tab" data-ramp="standard" type="button" aria-pressed="true" aria-label="standard ramp">standard</button>
+        <button class="tab" data-ramp="blocks" type="button" aria-pressed="false" aria-label="blocks ramp">blocks</button>
+        <button class="tab" data-ramp="dots" type="button" aria-pressed="false" aria-label="dots ramp">dots</button>
+        <button class="tab" data-ramp="binary" type="button" aria-pressed="false" aria-label="binary ramp">binary</button>
+        <button class="tab" data-ramp="donut" type="button" aria-pressed="false" aria-label="donut ramp">donut</button>
+      </div>
     </div>
 
     <div class="group">
-      <label class="lab" for="sel-colour">Colour</label>
-      <select id="sel-colour" aria-label="Colour mode">
-        <option value="phosphor">phosphor</option>
-        <option value="amber">amber</option>
-        <option value="paper">paper</option>
-      </select>
+      <span class="lab" id="lab-colour">Colour</span>
+      <div class="tabs seg colour" id="seg-colour" role="group" aria-labelledby="lab-colour">
+        <button class="tab" data-colour="phosphor" type="button" aria-pressed="true" aria-label="phosphor colour">phosphor</button>
+        <button class="tab" data-colour="amber" type="button" aria-pressed="false" aria-label="amber colour">amber</button>
+        <button class="tab" data-colour="paper" type="button" aria-pressed="false" aria-label="paper colour">paper</button>
+      </div>
     </div>
 
     <div class="group sliders">
       <div class="slider">
         <label for="sl-speed">Speed</label>
         <input type="range" id="sl-speed" min="0" max="200" value="100" aria-label="Speed" aria-valuetext="100 percent">
+        <span class="val" id="val-speed">100</span>
       </div>
       <div class="slider">
         <label for="sl-cell">Cell</label>
         <input type="range" id="sl-cell" min="7" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
+        <span class="val" id="val-cell">12</span>
       </div>
       <div class="slider">
         <label for="sl-contrast">Contrast</label>
         <input type="range" id="sl-contrast" min="40" max="220" value="100" aria-label="Contrast" aria-valuetext="100 percent">
+        <span class="val" id="val-contrast">100</span>
       </div>
     </div>
 
-    <button class="btn" id="btn-hide" type="button" aria-label="Hide control bar for a clean view">hide</button>
+    <button class="btn" id="btn-hide" type="button" aria-pressed="false" aria-label="Hide control bar for a clean view">hide</button>
   </div>
 </header>
 
@@ -483,7 +494,7 @@
      A per-cell z-buffer resolves occlusion; lum = clamped N.L.
      ==================================================================== */
   var Donut = (function () {
-    var A = 0, B = 0;            // rotation angles, advanced by time
+    var simT = 0;               // absolute accumulated sim time (seconds)
     var zbuf = null;            // 1/z per cell (larger = nearer)
     var R1 = 1.0, R2 = 2.0;     // tube radius, centre radius
     var K1auto = 1;             // projection scale, set from grid
@@ -492,10 +503,18 @@
       zbuf = new Float32Array(gridN);
     }
 
+    // pin absolute sim time (used by the reduced-motion static frame so the
+    // donut is deterministic and identical on every re-render).
+    function setTime(t) { simT = t; }
+
+    // angles are a PURE function of absolute time + pointer offset, so the
+    // reduced-motion frame (fixed simT) is deterministic and identical on every
+    // re-render, and the pointer AIMS the donut (bounded offset) instead of
+    // accelerating its spin.
     function render(dt, tiltX, tiltY) {
-      // advance rotations; pointer adds a gentle tilt bias toward the cursor
-      A += dt * 0.9 + tiltY * dt * 1.6;
-      B += dt * 0.45 + tiltX * dt * 1.6;
+      simT += dt;
+      var A = simT * 0.9 + tiltY * 2.4;
+      var B = simT * 0.45 + tiltX * 2.4;
 
       // clear buffers
       lum.fill(0);
@@ -555,7 +574,7 @@
       }
     }
 
-    return { reset: reset, render: render };
+    return { reset: reset, render: render, setTime: setTime };
   })();
 
   /* ====================================================================
@@ -566,6 +585,7 @@
      ==================================================================== */
   var Matrix = (function () {
     var head = null, spd = null, len = null;
+    var mGlyphCol = null;       // persistent per-cell glyph code, survives frames
     var cap = 0;
 
     function reset() {
@@ -573,12 +593,20 @@
       head = new Float32Array(cap);
       spd  = new Float32Array(cap);
       len  = new Int16Array(cap);
+      // persistent glyph identities for every grid cell; seeded once so streams
+      // read as stable characters that only occasionally mutate (not reborn
+      // every frame). Survives across render() calls — never cleared wholesale.
+      mGlyphCol = new Uint32Array(gridN);
+      for (var i = 0; i < gridN; i++) mGlyphCol[i] = randGlyph();
       for (var c = 0; c < cap; c++) seed(c, true);
     }
     function seed(c, stagger) {
-      head[c] = stagger ? -Math.random() * rows : -Math.random() * 6;
-      spd[c]  = 6 + Math.random() * 16;          // cells/sec
-      len[c]  = 6 + (Math.random() * 18) | 0;    // tail length
+      // initial (stagger) heads scatter across the WHOLE screen (small overscan
+      // above), so reset() pre-fills a dense, full-height field within ~1s of
+      // load instead of dribbling in from offscreen. Recycle reseeds just above.
+      head[c] = stagger ? (Math.random() * (rows + 12) - 6) : -Math.random() * 6;
+      spd[c]  = 8 + Math.random() * 18;          // cells/sec
+      len[c]  = 14 + (Math.random() * 26) | 0;   // tail length (14..40)
     }
     function randGlyph() {
       return MATRIX_GLYPHS.charCodeAt((Math.random() * MATRIX_GLYPHS.length) | 0);
@@ -587,7 +615,7 @@
     function render(dt) {
       lum.fill(0);
       glyph.fill(0);
-      if (!head || cap !== cols) reset();
+      if (!head || cap !== cols || !mGlyphCol || mGlyphCol.length !== gridN) reset();
 
       for (var c = 0; c < cols; c++) {
         head[c] += spd[c] * dt;
@@ -611,9 +639,11 @@
           v = Math.min(1, v + boost);
           if (v > lum[idx]) {
             lum[idx] = v;
-            // head + occasional mutations get fresh glyphs; rest stable-ish
-            glyph[idx] = (t === 0 || Math.random() < 0.06) ? randGlyph()
-                       : (glyph[idx] || randGlyph());
+            // persistent identity: head always mutates; the tail keeps its
+            // standing glyph and only occasionally flips (~1.2%), so streams
+            // stay stable across frames instead of shimmering all-new each frame.
+            if (t === 0 || Math.random() < 0.012) mGlyphCol[idx] = randGlyph();
+            glyph[idx] = mGlyphCol[idx];
           }
         }
         if ((h - tail) > rows) seed(c, false);
@@ -630,6 +660,8 @@
      ==================================================================== */
   var Plasma = (function () {
     var phase = 0;
+
+    function setTime(t) { phase = t; }
 
     function render(dt) {
       phase += dt;
@@ -659,7 +691,7 @@
       }
     }
 
-    return { render: render };
+    return { render: render, setTime: setTime };
   })();
 
   /* ---------- renderer: blit the atlas per non-blank cell ---------- */
@@ -749,12 +781,31 @@
     rafId = window.requestAnimationFrame(loop);
   }
 
+  // reduced-motion: render exactly ONE deterministic, content-rich static frame.
+  // Donut angles are pinned to an absolute sim time so the frame is identical on
+  // every re-render (no creeping rotation from repeated pointermove/resize).
+  // Matrix gets a real settle so columns are seeded INTO view (not a blank field)
+  // and plasma is advanced to a developed (non-faint) phase.
+  function renderStaticFrame() {
+    var tiltX = 0, tiltY = 0; // ignore pointer for a deterministic frame
+    if (state.engine === 'donut') {
+      Donut.setTime(1.2);       // fixed absolute time -> stable A,B
+      Donut.render(0, tiltX, tiltY);
+    } else if (state.engine === 'matrix') {
+      Matrix.reset();           // re-prime the full-height field
+      Matrix.render(0.4);       // larger settle step advances heads into view
+    } else {
+      Plasma.setTime(3.0);      // fixed developed phase (deterministic)
+      Plasma.render(0);
+    }
+    paint();
+  }
+
   function start() {
     if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
     last = 0;
     if (reduce) {
-      // exactly ONE static frame, no rAF loop
-      step(0.016);
+      renderStaticFrame();
     } else {
       rafId = window.requestAnimationFrame(loop);
     }
@@ -771,17 +822,26 @@
 
   /* ---------- URL hash wiring: #e=engine&c=charset&k=colour ---------- */
 
+  var charsetFromHash = false; // did the URL explicitly pin a ramp?
+
   function readHash() {
     var h = (location.hash || '').replace(/^#/, '');
-    if (!h) return;
+    charsetFromHash = false;
+    if (!h) {
+      // no hash: default the donut engine to its canonical 'donut' ramp
+      if (state.engine === 'donut') state.charset = 'donut';
+      return;
+    }
     var parts = h.split('&');
     for (var i = 0; i < parts.length; i++) {
       var kv = parts[i].split('=');
       var k = kv[0], val = kv[1];
       if (k === 'e' && CHARSETS && (val === 'donut' || val === 'matrix' || val === 'plasma')) state.engine = val;
-      else if (k === 'c' && CHARSETS[val]) state.charset = val;
+      else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
     }
+    // donut with no explicit ramp -> canonical donut ramp
+    if (state.engine === 'donut' && !charsetFromHash) state.charset = 'donut';
   }
 
   var hashWriteTimer = 0;
@@ -797,29 +857,44 @@
 
   /* ---------- control wiring ---------- */
 
-  var engBtns = {
-    donut:  document.getElementById('eng-donut'),
-    matrix: document.getElementById('eng-matrix'),
-    plasma: document.getElementById('eng-plasma')
-  };
-  var selCharset = document.getElementById('sel-charset');
-  var selColour  = document.getElementById('sel-colour');
+  var segEngine  = document.querySelector('.tabs[aria-labelledby="lab-engine"]');
+  var segCharset = document.getElementById('seg-charset');
+  var segColour  = document.getElementById('seg-colour');
   var slSpeed    = document.getElementById('sl-speed');
   var slCell     = document.getElementById('sl-cell');
   var slContrast = document.getElementById('sl-contrast');
+  var valSpeed   = document.getElementById('val-speed');
+  var valCell    = document.getElementById('val-cell');
+  var valContrast= document.getElementById('val-contrast');
+  var btnHide    = document.getElementById('btn-hide');
+  var btnShow    = document.getElementById('btn-show');
+
+  // mark the active button (aria-pressed) within a delegated chip group
+  function setPressed(groupEl, attr, value) {
+    var btns = groupEl.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', btns[i].getAttribute(attr) === value ? 'true' : 'false');
+    }
+  }
+
+  function syncSliderLabels() {
+    var sp = Math.round(state.speed * 100), co = Math.round(state.contrast * 100);
+    slSpeed.value    = sp;
+    slCell.value     = state.cell;
+    slContrast.value = co;
+    slSpeed.setAttribute('aria-valuetext', sp + ' percent');
+    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
+    slContrast.setAttribute('aria-valuetext', co + ' percent');
+    valSpeed.textContent    = sp;
+    valCell.textContent     = state.cell;
+    valContrast.textContent = co;
+  }
 
   function syncControls() {
-    for (var key in engBtns) {
-      engBtns[key].setAttribute('aria-pressed', key === state.engine ? 'true' : 'false');
-    }
-    selCharset.value = state.charset;
-    selColour.value  = state.colour;
-    slSpeed.value    = Math.round(state.speed * 100);
-    slCell.value     = state.cell;
-    slContrast.value = Math.round(state.contrast * 100);
-    slSpeed.setAttribute('aria-valuetext', Math.round(state.speed * 100) + ' percent');
-    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
-    slContrast.setAttribute('aria-valuetext', Math.round(state.contrast * 100) + ' percent');
+    setPressed(segEngine, 'data-engine', state.engine);
+    setPressed(segCharset, 'data-ramp', state.charset);
+    setPressed(segColour, 'data-colour', state.colour);
+    syncSliderLabels();
   }
 
   function setEngine(e) {
@@ -831,35 +906,51 @@
     if (reduce) start(); // re-render the single static frame
   }
 
-  for (var key in engBtns) {
-    (function (e, btn) {
-      btn.addEventListener('click', function () { setEngine(e); });
-    })(key, engBtns[key]);
-  }
-
-  selCharset.addEventListener('change', function () {
-    state.charset = selCharset.value;
+  // delegated click per chip group (one listener each)
+  segEngine.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.engine) return;
+    setEngine(btn.dataset.engine);
+  });
+  segCharset.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.ramp) return;
+    state.charset = btn.dataset.ramp;
+    setPressed(segCharset, 'data-ramp', state.charset);
     atlasDirty = true;
     writeHash();
     if (reduce) start();
   });
-
-  selColour.addEventListener('change', function () {
-    state.colour = selColour.value;
+  segColour.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.colour) return;
+    state.colour = btn.dataset.colour;
+    setPressed(segColour, 'data-colour', state.colour);
     applyColour();
     writeHash();
     if (reduce) start();
   });
 
+  // title hints: ramp name + the actual ramp string
+  (function () {
+    var btns = segCharset.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      var name = btns[i].dataset.ramp;
+      btns[i].setAttribute('title', name + '  ' + (CHARSETS[name] || ''));
+    }
+  })();
+
   slSpeed.addEventListener('input', function () {
     state.speed = (+slSpeed.value) / 100;
     slSpeed.setAttribute('aria-valuetext', slSpeed.value + ' percent');
+    valSpeed.textContent = slSpeed.value;
     if (reduce) start();
   });
 
   slCell.addEventListener('input', function () {
     state.cell = +slCell.value;
     slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
+    valCell.textContent = state.cell;
     resize();
     if (reduce) start();
   });
@@ -867,16 +958,31 @@
   slContrast.addEventListener('input', function () {
     state.contrast = (+slContrast.value) / 100;
     slContrast.setAttribute('aria-valuetext', slContrast.value + ' percent');
+    valContrast.textContent = slContrast.value;
     if (reduce) start();
   });
 
-  document.getElementById('btn-hide').addEventListener('click', function () {
+  function hideBar() {
     document.body.classList.add('barhidden');
-    document.getElementById('btn-show').focus();
-  });
-  document.getElementById('btn-show').addEventListener('click', function () {
+    btnHide.setAttribute('aria-pressed', 'true');
+    btnShow.focus();
+  }
+  function showBar() {
     document.body.classList.remove('barhidden');
-    document.getElementById('btn-hide').focus();
+    btnHide.setAttribute('aria-pressed', 'false');
+    btnHide.focus();
+  }
+  btnHide.addEventListener('click', hideBar);
+  btnShow.addEventListener('click', showBar);
+
+  // 'H' toggles the control bar (ignored while typing in a form control)
+  window.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'h' && ev.key !== 'H') return;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var t = ev.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    if (document.body.classList.contains('barhidden')) showBar();
+    else hideBar();
   });
 
   // pointer reactivity
