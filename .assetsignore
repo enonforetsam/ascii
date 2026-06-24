@@ -5,6 +5,7 @@
 .gitignore
 .assetsignore
 worker.js
+wrangler.jsonc
 node_modules
 tests
 package.json

@@ -27,7 +27,7 @@ test('wrangler.jsonc parses and targets the right domains', () => {
 
 test('.assetsignore guards against leaking secrets/build files', () => {
   const lines = read('.assetsignore').split('\n').map((l) => l.trim());
-  for (const must of ['.git', '.wrangler', '.dev.vars', 'worker.js', 'node_modules']) {
+  for (const must of ['.git', '.wrangler', '.dev.vars', 'worker.js', 'wrangler.jsonc', 'node_modules']) {
     assert.ok(lines.includes(must), `.assetsignore must exclude ${must}`);
   }
 });
