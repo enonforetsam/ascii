@@ -31,8 +31,7 @@
     text-shadow:var(--glow);
   }
 
-  /* living centerpiece: matrix rain on a measured monospace grid */
-  #rain{
+  #art{
     position:fixed;
     inset:0;
     width:100%;
@@ -41,73 +40,220 @@
     z-index:0;
   }
 
-  /* foreground UI sits above the rain, dimmed by a soft radial vignette */
-  .ui{
-    position:relative;
-    z-index:2;
-    height:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    padding:24px;
+  .vignette{
+    position:fixed;
+    inset:0;
+    z-index:1;
     pointer-events:none;
+    background:radial-gradient(120% 100% at 50% 50%,
+      rgba(5,8,10,0) 42%,
+      rgba(5,8,10,.45) 80%,
+      rgba(5,8,10,.9) 100%);
+  }
+  body.paper .vignette{
+    background:radial-gradient(120% 100% at 50% 50%,
+      rgba(228,230,224,0) 42%,
+      rgba(228,230,224,.35) 82%,
+      rgba(228,230,224,.78) 100%);
   }
 
-  .terminal{
-    border:1px solid var(--ink-faint);
-    background:rgba(5,8,10,.62);
-    backdrop-filter:blur(1.5px);
-    padding:28px 40px;
-    text-align:center;
-    box-shadow:0 0 0 1px rgba(57,255,122,.06), 0 0 40px rgba(0,0,0,.6) inset;
+  /* compact top bar — the wordmark shrunk from the M0 splash */
+  .topbar{
+    position:fixed;
+    top:0;left:0;right:0;
+    z-index:4;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    padding:9px 14px;
+    background:linear-gradient(to bottom, rgba(5,8,10,.82), rgba(5,8,10,.5) 70%, rgba(5,8,10,0));
   }
-
-  .wordmark{
-    font-size:clamp(40px,12vw,92px);
+  body.paper .topbar{
+    background:linear-gradient(to bottom, rgba(228,230,224,.86), rgba(228,230,224,.5) 70%, rgba(228,230,224,0));
+  }
+  h1.wordmark{
+    font-size:18px;
     font-weight:700;
-    letter-spacing:.14em;
+    letter-spacing:.16em;
     line-height:1;
-    text-shadow:0 0 6px rgba(57,255,122,.7), 0 0 22px rgba(57,255,122,.4);
+    text-shadow:0 0 6px rgba(57,255,122,.7), 0 0 18px rgba(57,255,122,.4);
+    white-space:nowrap;
+    flex:0 0 auto;
   }
-  .cursor{
+  body.paper h1.wordmark{ text-shadow:none; }
+  .wordmark .blip{
     display:inline-block;
-    width:.62em;
-    height:.92em;
-    margin-left:.12em;
-    vertical-align:-.06em;
+    width:.5em;height:.86em;
+    margin-left:.18em;
+    vertical-align:-.08em;
     background:var(--ink);
     box-shadow:var(--glow);
     animation:blink 1.05s steps(1,end) infinite;
   }
+  body.paper .wordmark .blip{ box-shadow:none; }
   @keyframes blink{50%{opacity:0}}
-
-  .tagline{
-    margin-top:14px;
-    font-size:clamp(11px,2.6vw,15px);
-    letter-spacing:.42em;
+  .sub{
+    font-size:10px;
+    letter-spacing:.34em;
     text-transform:uppercase;
-    color:var(--ink);
-    opacity:.82;
+    opacity:.62;
+    white-space:nowrap;
+    flex:0 0 auto;
   }
+  @media (max-width:720px){ .sub{display:none} }
+
+  /* control bar */
+  .controls{
+    margin-left:auto;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:10px 14px;
+    justify-content:flex-end;
+  }
+  .group{
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .group > .lab{
+    font-size:9px;
+    letter-spacing:.22em;
+    text-transform:uppercase;
+    opacity:.6;
+    user-select:none;
+  }
+
+  /* tab + button — all >=32px hit targets */
+  .tabs{ display:flex; gap:3px; }
+  .tab, .btn{
+    appearance:none;
+    -webkit-appearance:none;
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.06em;
+    color:var(--ink);
+    background:rgba(57,255,122,.05);
+    border:1px solid var(--ink-faint);
+    min-height:32px;
+    min-width:32px;
+    padding:0 11px;
+    cursor:pointer;
+    text-shadow:none;
+    border-radius:2px;
+    transition:background .12s, border-color .12s;
+  }
+  body.paper .tab, body.paper .btn{
+    color:var(--ink); background:rgba(31,143,71,.07);
+  }
+  .tab:hover, .btn:hover{ background:rgba(57,255,122,.16); }
+  .tab[aria-pressed="true"]{
+    background:rgba(57,255,122,.24);
+    border-color:var(--ink);
+    box-shadow:0 0 8px rgba(57,255,122,.35);
+  }
+  body.paper .tab[aria-pressed="true"]{ box-shadow:none; background:rgba(31,143,71,.28); }
+
+  select{
+    appearance:none;
+    -webkit-appearance:none;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink);
+    background:rgba(57,255,122,.05);
+    border:1px solid var(--ink-faint);
+    min-height:32px;
+    padding:0 26px 0 9px;
+    cursor:pointer;
+    border-radius:2px;
+    text-shadow:none;
+    background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+    background-position:calc(100% - 14px) 13px, calc(100% - 9px) 13px;
+    background-size:5px 5px,5px 5px;
+    background-repeat:no-repeat;
+  }
+  body.paper select{ color:var(--ink); }
+
+  /* sliders */
+  .slider{
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .slider label{
+    font-size:9px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    opacity:.62;
+    white-space:nowrap;
+  }
+  input[type="range"]{
+    -webkit-appearance:none;
+    appearance:none;
+    width:84px;
+    height:32px;
+    background:transparent;
+    cursor:pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track{
+    height:2px;
+    background:var(--ink-faint);
+  }
+  input[type="range"]::-moz-range-track{
+    height:2px;
+    background:var(--ink-faint);
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    appearance:none;
+    width:12px;height:12px;
+    margin-top:-5px;
+    border-radius:50%;
+    background:var(--ink);
+    box-shadow:0 0 6px rgba(57,255,122,.7);
+  }
+  body.paper input[type="range"]::-webkit-slider-thumb{ box-shadow:none; }
+  input[type="range"]::-moz-range-thumb{
+    width:12px;height:12px;
+    border:none;border-radius:50%;
+    background:var(--ink);
+    box-shadow:0 0 6px rgba(57,255,122,.7);
+  }
+  body.paper input[type="range"]::-moz-range-thumb{ box-shadow:none; }
+
+  /* uniform, always-visible focus ring */
+  .tab:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible{
+    outline:2px solid var(--ink);
+    outline-offset:2px;
+  }
+
+  /* hide-bar toggle pinned bottom-right so the bar can vanish for clean view */
+  .reveal{
+    position:fixed;
+    right:12px;bottom:12px;
+    z-index:4;
+    display:none;
+  }
+  body.barhidden .topbar{ display:none; }
+  body.barhidden .reveal{ display:block; }
 
   footer{
     position:fixed;
     left:0;right:0;bottom:0;
-    z-index:2;
+    z-index:4;
     display:flex;
     justify-content:space-between;
     gap:16px;
-    padding:12px 16px;
-    font-size:11px;
+    padding:10px 14px;
+    font-size:10px;
     letter-spacing:.16em;
     color:var(--ink-faint);
     text-shadow:none;
     pointer-events:none;
   }
   footer span{white-space:nowrap}
+  body.barhidden footer{ display:none; }
 
-  /* scanline overlay */
   .scanlines{
     position:fixed;
     inset:0;
@@ -123,172 +269,655 @@
     mix-blend-mode:multiply;
     opacity:.7;
   }
-  /* subtle vignette */
-  .vignette{
-    position:fixed;
-    inset:0;
-    z-index:1;
-    pointer-events:none;
-    background:radial-gradient(120% 100% at 50% 50%,
-      rgba(5,8,10,0) 38%,
-      rgba(5,8,10,.55) 78%,
-      rgba(5,8,10,.92) 100%);
-  }
+  body.paper .scanlines{ opacity:.28; }
 
   @media (prefers-reduced-motion: reduce){
-    .cursor{animation:none}
+    .wordmark .blip{animation:none}
   }
-  @media (max-width:480px){
-    footer{font-size:10px;letter-spacing:.08em}
+  @media (max-width:560px){
+    .controls{ gap:8px 10px; }
+    .group.sliders .slider:nth-child(n+3){ display:none; }
   }
 </style>
 </head>
 <body>
-<canvas id="rain" aria-hidden="true"></canvas>
+<canvas id="art" aria-hidden="true"></canvas>
 <div class="vignette"></div>
 
-<main class="ui">
-  <div class="terminal" role="banner">
-    <div class="wordmark">ASCII<span class="cursor" aria-hidden="true"></span></div>
-    <div class="tagline">everything is characters</div>
+<header class="topbar">
+  <h1 class="wordmark">ASCII<span class="blip" aria-hidden="true"></span></h1>
+  <span class="sub">everything is characters</span>
+
+  <div class="controls" role="group" aria-label="Instrument controls">
+    <div class="group">
+      <span class="lab" id="lab-engine">Engine</span>
+      <div class="tabs" role="group" aria-labelledby="lab-engine">
+        <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
+        <button class="tab" id="eng-matrix" data-engine="matrix" type="button" aria-pressed="false">matrix</button>
+        <button class="tab" id="eng-plasma" data-engine="plasma" type="button" aria-pressed="false">plasma</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label class="lab" for="sel-charset">Charset</label>
+      <select id="sel-charset" aria-label="Character ramp">
+        <option value="standard">standard</option>
+        <option value="blocks">blocks</option>
+        <option value="dots">dots</option>
+        <option value="binary">binary</option>
+        <option value="donut">donut</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label class="lab" for="sel-colour">Colour</label>
+      <select id="sel-colour" aria-label="Colour mode">
+        <option value="phosphor">phosphor</option>
+        <option value="amber">amber</option>
+        <option value="paper">paper</option>
+      </select>
+    </div>
+
+    <div class="group sliders">
+      <div class="slider">
+        <label for="sl-speed">Speed</label>
+        <input type="range" id="sl-speed" min="0" max="200" value="100" aria-label="Speed" aria-valuetext="100 percent">
+      </div>
+      <div class="slider">
+        <label for="sl-cell">Cell</label>
+        <input type="range" id="sl-cell" min="7" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
+      </div>
+      <div class="slider">
+        <label for="sl-contrast">Contrast</label>
+        <input type="range" id="sl-contrast" min="40" max="220" value="100" aria-label="Contrast" aria-valuetext="100 percent">
+      </div>
+    </div>
+
+    <button class="btn" id="btn-hide" type="button" aria-label="Hide control bar for a clean view">hide</button>
   </div>
-</main>
+</header>
+
+<button class="btn reveal" id="btn-show" type="button" aria-label="Show control bar">controls</button>
 
 <footer>
-  <span>M0 · skeleton — M1 brings the donut</span>
+  <span>M1 · donut / matrix / plasma</span>
   <span>ascii.krackeddevs.com</span>
 </footer>
 
 <div class="scanlines" aria-hidden="true"></div>
 
 <script>
-  (function () {
-    var canvas = document.getElementById('rain');
-    var ctx = canvas.getContext('2d');
-    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+(function () {
+  'use strict';
 
-    // glyph palette — katakana-ish slashes, brackets and symbols read as "code rain"
-    var GLYPHS = '01<>{}[]()/\\|=+*#@$%&ABCDEFGHJKLMNPQRSTUVWXYZ:;.,abcdefghijkmnopqrstuvwxyz';
-    var FONT_SIZE = 16;           // logical px per cell (scaled for DPR below)
-    var dpr = 1;
-    var cols = 0, rows = 0;
-    var drops = [];               // head row position per column (float)
-    var speed = [];               // fall speed per column
+  var canvas = document.getElementById('art');
+  var ctx = canvas.getContext('2d', { alpha: false });
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    function rand(n) { return Math.floor(Math.random() * n); }
-    function glyph() { return GLYPHS.charAt(rand(GLYPHS.length)); }
+  /* ---------- configuration tables ---------- */
 
-    function resize() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      var w = window.innerWidth;
-      var h = window.innerHeight;
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
+  // ramps go DARK -> BRIGHT; index 0 is treated as blank (skipped at render)
+  var CHARSETS = {
+    standard: ' .:-=+*#%@',
+    blocks:   ' .:░▒▓█',
+    dots:     ' .·:•',
+    binary:   ' 01',
+    donut:    ' .,-~:;=!*#$@'
+  };
 
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.font = '700 ' + FONT_SIZE + 'px ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
-      ctx.textBaseline = 'top';
+  // matrix uses its own glyph set (katakana + latin + symbols), forced per cell
+  var MATRIX_GLYPHS =
+    'アイウエオカキクケコサシスセソ' +
+    'タチツテトナニヌネノハヒフヘホ' +
+    '0123456789<>=*+-/\\|:;ABCDEFGHKLMNPRSTUXYZ';
 
-      cols = Math.ceil(w / FONT_SIZE);
-      rows = Math.ceil(h / FONT_SIZE);
+  var COLOURS = {
+    phosphor: { bg:'#05080a', ink:[57,255,122],  paper:false },
+    amber:    { bg:'#0a0600', ink:[255,176,38],   paper:false },
+    paper:    { bg:'#e4e6e0', ink:[18,40,24],      paper:true  }
+  };
 
-      drops = new Array(cols);
-      speed = new Array(cols);
-      for (var i = 0; i < cols; i++) {
-        drops[i] = Math.random() * -rows;          // stagger the start above the top
-        speed[i] = 0.35 + Math.random() * 0.55;     // cells per frame
-      }
+  /* ---------- live state ---------- */
+
+  var state = {
+    engine:  'donut',
+    charset: 'standard',
+    colour:  'phosphor',
+    speed:   1.0,    // 0..2 multiplier
+    cell:    12,     // logical px per cell
+    contrast:1.0     // 0.4..2.2 gamma-ish multiplier
+  };
+
+  // grid + reusable typed arrays (the character buffer — source of truth)
+  var dpr = 1, cw = 12, ch = 12, cols = 0, rows = 0, gridN = 0;
+  var lum = null;     // Float32Array, 0..1 intensity per cell
+  var glyph = null;   // Uint32Array, forced code point per cell; 0 => derive from ramp
+
+  var pointer = { x: -1, y: -1, gx: -1, gy: -1, active: false };
+
+  /* ---------- glyph atlas ---------- */
+  // Pre-bake the active ramp (and matrix set when needed) into an offscreen
+  // canvas at cell size, in the ink colour. We bake the glyph at full ink and
+  // quantize brightness via globalAlpha steps at blit time (limits state churn).
+
+  var atlas = document.createElement('canvas');
+  var actx = atlas.getContext('2d');
+  var atlasMap = {};        // codepoint -> column index in atlas
+  var atlasList = [];       // ordered codepoints baked
+  var atlasDirty = true;
+
+  function rampString() { return CHARSETS[state.charset] || CHARSETS.standard; }
+
+  function buildAtlas() {
+    var ink = COLOURS[state.colour].ink;
+    var inkCss = 'rgb(' + ink[0] + ',' + ink[1] + ',' + ink[2] + ')';
+
+    // collect the glyph set we need: the ramp always, plus matrix glyphs when
+    // the matrix engine is active (it forces code points).
+    var set = [];
+    var seen = {};
+    function add(cp) {
+      if (cp === 32 || seen[cp]) return; // skip space + dupes
+      seen[cp] = true; set.push(cp);
+    }
+    var ramp = rampString();
+    for (var i = 0; i < ramp.length; i++) add(ramp.charCodeAt(i));
+    if (state.engine === 'matrix') {
+      for (var j = 0; j < MATRIX_GLYPHS.length; j++) add(MATRIX_GLYPHS.charCodeAt(j));
     }
 
-    // Paint one full frame of the rain. `trail` toggles the fade-trail draw used
-    // by the animated path; the static (reduced-motion) frame draws solid columns.
-    function frame() {
-      var w = window.innerWidth;
-      var h = window.innerHeight;
+    atlasList = set;
+    atlasMap = {};
+    var n = set.length;
 
-      // translucent wipe leaves a fading green trail behind each head
-      ctx.fillStyle = 'rgba(5,8,10,0.14)';
-      ctx.fillRect(0, 0, w, h);
+    var tileW = Math.max(1, Math.ceil(cw * dpr));
+    var tileH = Math.max(1, Math.ceil(ch * dpr));
+    atlas.width  = Math.max(1, tileW * n);
+    atlas.height = tileH;
 
-      for (var i = 0; i < cols; i++) {
-        var x = i * FONT_SIZE;
-        var headY = drops[i] * FONT_SIZE;
+    actx.setTransform(1, 0, 0, 1, 0, 0);
+    actx.clearRect(0, 0, atlas.width, atlas.height);
+    actx.font = '700 ' + Math.round(ch * dpr * 0.96) + 'px ' +
+      'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+    actx.textBaseline = 'middle';
+    actx.textAlign = 'center';
+    actx.fillStyle = inkCss;
+    for (var k = 0; k < n; k++) {
+      atlasMap[set[k]] = k;
+      actx.fillText(String.fromCharCode(set[k]), k * tileW + tileW / 2, tileH / 2 + tileH * 0.02);
+    }
+    atlasDirty = false;
+  }
 
-        // bright leading glyph
-        ctx.fillStyle = '#caffdd';
-        ctx.shadowColor = 'rgba(57,255,122,0.9)';
-        ctx.shadowBlur = 8;
-        ctx.fillText(glyph(), x, headY);
+  /* ---------- grid sizing ---------- */
 
-        // a couple of dimmer trailing glyphs for body
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(57,255,122,0.62)';
-        ctx.fillText(glyph(), x, headY - FONT_SIZE);
-        ctx.fillStyle = 'rgba(57,255,122,0.30)';
-        ctx.fillText(glyph(), x, headY - FONT_SIZE * 2);
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = window.innerWidth, h = window.innerHeight;
 
-        drops[i] += speed[i];
-        // recycle the column once its head falls off the bottom
-        if (headY > h + FONT_SIZE * 3 && Math.random() > 0.975) {
-          drops[i] = -Math.random() * 6;
-          speed[i] = 0.35 + Math.random() * 0.55;
-        }
-      }
+    canvas.width  = Math.max(1, Math.floor(w * dpr));
+    canvas.height = Math.max(1, Math.floor(h * dpr));
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+
+    cw = state.cell;
+    ch = state.cell;
+    cols = Math.max(1, Math.ceil(w / cw));
+    rows = Math.max(1, Math.ceil(h / ch));
+    gridN = cols * rows;
+
+    lum = new Float32Array(gridN);
+    glyph = new Uint32Array(gridN);
+
+    // reset per-engine state that depends on grid dims
+    Matrix.reset();
+    Donut.reset();
+
+    atlasDirty = true;
+  }
+
+  /* ====================================================================
+     ENGINE 1 — DONUT  (Andy Sloane donut.c, ported to a lum/z-buffer grid)
+     A torus of tube radius R1 around centre radius R2, rotated by angles
+     A (about X) and B (about Z), projected with ooz=1/z into grid cells.
+     A per-cell z-buffer resolves occlusion; lum = clamped N.L.
+     ==================================================================== */
+  var Donut = (function () {
+    var A = 0, B = 0;            // rotation angles, advanced by time
+    var zbuf = null;            // 1/z per cell (larger = nearer)
+    var R1 = 1.0, R2 = 2.0;     // tube radius, centre radius
+    var K1auto = 1;             // projection scale, set from grid
+
+    function reset() {
+      zbuf = new Float32Array(gridN);
     }
 
-    // A single, motionless composed frame for reduced-motion users: fill the
-    // whole grid with low-glow glyphs and a few bright heads. No rAF loop.
-    function staticFrame() {
-      var w = window.innerWidth;
-      var h = window.innerHeight;
-      ctx.fillStyle = '#05080a';
-      ctx.fillRect(0, 0, w, h);
-      ctx.shadowBlur = 0;
-      for (var c = 0; c < cols; c++) {
-        var lit = rand(rows);
-        for (var r = 0; r < rows; r++) {
-          var dist = r - lit;
-          if (dist === 0) {
-            ctx.fillStyle = '#caffdd';
-          } else if (dist > 0 && dist < 6) {
-            ctx.fillStyle = 'rgba(57,255,122,' + (0.5 - dist * 0.07).toFixed(2) + ')';
-          } else {
-            ctx.fillStyle = 'rgba(57,255,122,0.10)';
+    function render(dt, tiltX, tiltY) {
+      // advance rotations; pointer adds a gentle tilt bias toward the cursor
+      A += dt * 0.9 + tiltY * dt * 1.6;
+      B += dt * 0.45 + tiltX * dt * 1.6;
+
+      // clear buffers
+      lum.fill(0);
+      glyph.fill(0);
+      if (!zbuf || zbuf.length !== gridN) zbuf = new Float32Array(gridN);
+      zbuf.fill(0);
+
+      // projection constants. K2 pushes the donut away from the eye; K1 scales
+      // the projection so the donut fills a sensible fraction of the grid.
+      var K2 = 5.0;
+      // monospace cells are ~2x taller than wide; aspect corrects Y so the
+      // donut reads round, not squashed.
+      var aspect = 0.5;
+      var K1 = Math.min(cols, rows / aspect) * K2 * 0.30 / (R1 + R2);
+
+      var cosA = Math.cos(A), sinA = Math.sin(A);
+      var cosB = Math.cos(B), sinB = Math.sin(B);
+
+      var halfC = cols / 2, halfR = rows / 2;
+
+      // theta sweeps the tube cross-section, phi sweeps around the centre.
+      // step counts trade detail vs cost; chosen to overfill the grid.
+      var thetaStep = 0.07, phiStep = 0.02;
+      for (var theta = 0; theta < 6.283185; theta += thetaStep) {
+        var ct = Math.cos(theta), st = Math.sin(theta);
+        for (var phi = 0; phi < 6.283185; phi += phiStep) {
+          var cp = Math.cos(phi), sp = Math.sin(phi);
+
+          // point on the torus surface before world rotation
+          var circleX = R2 + R1 * ct;   // distance from centre axis
+          var circleY = R1 * st;
+
+          // rotate about X by A then about Z by B (Sloane's composition)
+          var x = circleX * (cosB * cp + sinA * sinB * sp) - circleY * cosA * sinB;
+          var y = circleX * (sinB * cp - sinA * cosB * sp) + circleY * cosA * cosB;
+          var z = K2 + cosA * circleX * sp + circleY * sinA;
+          var ooz = 1 / z;   // 1/z, the depth key
+
+          // project to grid cell; Y scaled by aspect so it isn't squashed
+          var xp = (halfC + K1 * ooz * x) | 0;
+          var yp = (halfR - K1 * aspect * ooz * y) | 0;
+
+          if (xp < 0 || xp >= cols || yp < 0 || yp >= rows) continue;
+
+          // surface normal . light. Light points up/back: (0,1,-1)/sqrt2.
+          var L = cp * ct * sinB - cosA * ct * sp - sinA * st +
+                  cosB * (cosA * st - ct * sinA * sp);
+          // L = N.L in [-sqrt2, sqrt2]; only lit (front) faces draw
+          if (L > 0) {
+            var idx = yp * cols + xp;
+            if (ooz > zbuf[idx]) {        // nearer than what's already here
+              zbuf[idx] = ooz;
+              lum[idx] = L * 0.707;        // normalize to ~0..1
+            }
           }
-          ctx.fillText(glyph(), c * FONT_SIZE, r * FONT_SIZE);
         }
       }
     }
 
-    var rafId = 0;
-    function loop() {
-      frame();
+    return { reset: reset, render: render };
+  })();
+
+  /* ====================================================================
+     ENGINE 2 — MATRIX  (vertical falling-glyph columns)
+     Per column a head row advances downward; the head is brightest, the
+     tail fades over `len` cells, everything above is dark. Glyphs mutate
+     occasionally; the cursor brightens nearby columns. Recycle off-bottom.
+     ==================================================================== */
+  var Matrix = (function () {
+    var head = null, spd = null, len = null;
+    var cap = 0;
+
+    function reset() {
+      cap = cols;
+      head = new Float32Array(cap);
+      spd  = new Float32Array(cap);
+      len  = new Int16Array(cap);
+      for (var c = 0; c < cap; c++) seed(c, true);
+    }
+    function seed(c, stagger) {
+      head[c] = stagger ? -Math.random() * rows : -Math.random() * 6;
+      spd[c]  = 6 + Math.random() * 16;          // cells/sec
+      len[c]  = 6 + (Math.random() * 18) | 0;    // tail length
+    }
+    function randGlyph() {
+      return MATRIX_GLYPHS.charCodeAt((Math.random() * MATRIX_GLYPHS.length) | 0);
+    }
+
+    function render(dt) {
+      lum.fill(0);
+      glyph.fill(0);
+      if (!head || cap !== cols) reset();
+
+      for (var c = 0; c < cols; c++) {
+        head[c] += spd[c] * dt;
+        var h = head[c];
+        var tail = len[c];
+
+        // pointer halo: columns near the cursor get a brightness boost
+        var boost = 0;
+        if (pointer.active && pointer.gx >= 0) {
+          var d = Math.abs(c - pointer.gx);
+          if (d < 6) boost = (1 - d / 6) * 0.5;
+        }
+
+        for (var t = 0; t < tail; t++) {
+          var r = (h | 0) - t;
+          if (r < 0 || r >= rows) continue;
+          var idx = r * cols + c;
+          var v;
+          if (t === 0) v = 1.0;                       // bright head
+          else v = Math.max(0, 1 - t / tail) * 0.85;  // fading trail
+          v = Math.min(1, v + boost);
+          if (v > lum[idx]) {
+            lum[idx] = v;
+            // head + occasional mutations get fresh glyphs; rest stable-ish
+            glyph[idx] = (t === 0 || Math.random() < 0.06) ? randGlyph()
+                       : (glyph[idx] || randGlyph());
+          }
+        }
+        if ((h - tail) > rows) seed(c, false);
+      }
+    }
+
+    return { reset: reset, render: render };
+  })();
+
+  /* ====================================================================
+     ENGINE 3 — PLASMA  (normalized sum of sines over x,y,t)
+     A smooth morphing scalar field mapped to lum (no glyph override; the
+     ramp draws it). The cursor injects a radial ripple/attractor term.
+     ==================================================================== */
+  var Plasma = (function () {
+    var phase = 0;
+
+    function render(dt) {
+      phase += dt;
+      glyph.fill(0); // ramp-driven, no forced glyphs
+
+      var t = phase;
+      var a = 0.21, b = 0.17, cc = 0.13, d = 0.20;
+      var cx = cols * 0.5, cy = rows * 0.5;
+      var pgx = pointer.active ? pointer.gx : -999;
+      var pgy = pointer.active ? pointer.gy : -999;
+
+      var idx = 0;
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++) {
+          var v = Math.sin(x * a + t) +
+                  Math.sin(y * b + t * 0.9) +
+                  Math.sin((x + y) * cc + t * 1.1) +
+                  Math.sin(Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) * d - t);
+          // cursor ripple: a travelling ring radiating from the pointer
+          if (pgx > -900) {
+            var rr = Math.sqrt((x - pgx) * (x - pgx) + (y - pgy) * (y - pgy));
+            v += Math.sin(rr * 0.55 - t * 3.0) * Math.exp(-rr * 0.05) * 2.0;
+          }
+          // 4 base sines span -4..4 (+ripple); normalize to 0..1
+          lum[idx++] = (v + 6) / 12;
+        }
+      }
+    }
+
+    return { render: render };
+  })();
+
+  /* ---------- renderer: blit the atlas per non-blank cell ---------- */
+
+  var ALPHA_STEPS = 6; // quantize brightness to N alpha tiers
+
+  function paint() {
+    var col = COLOURS[state.colour];
+    var tileW = Math.max(1, Math.ceil(cw * dpr));
+    var tileH = Math.max(1, Math.ceil(ch * dpr));
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = col.bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (atlasDirty) buildAtlas();
+
+    var ramp = rampString();
+    var rampLen = ramp.length;
+    var gamma = state.contrast;
+    var cpw = Math.max(1, cw * dpr);
+    var cph = Math.max(1, ch * dpr);
+
+    ctx.globalAlpha = 1;
+    var prevAlpha = -1;
+    var i = 0;
+    for (var y = 0; y < rows; y++) {
+      var py = Math.round(y * cph);
+      for (var x = 0; x < cols; x++, i++) {
+        var v = lum[i];
+        if (v <= 0.001) continue;
+        // contrast shaping
+        if (gamma !== 1) v = Math.pow(v, 1 / gamma);
+        if (v <= 0.004) continue;
+
+        // pick the glyph: forced code point, or derive from ramp by lum
+        var cp = glyph[i];
+        if (cp === 0) {
+          var ri = (v * (rampLen - 1) + 0.5) | 0;
+          if (ri < 1) continue;            // ramp index 0 == blank
+          if (ri > rampLen - 1) ri = rampLen - 1;
+          cp = ramp.charCodeAt(ri);
+          if (cp === 32) continue;         // space => blank
+        }
+        var tile = atlasMap[cp];
+        if (tile === undefined) continue;
+
+        // quantize alpha to limit state changes
+        var aStep = (v * ALPHA_STEPS + 0.5) | 0;
+        if (aStep < 1) aStep = 1;
+        if (aStep > ALPHA_STEPS) aStep = ALPHA_STEPS;
+        var alpha = aStep / ALPHA_STEPS;
+        if (alpha !== prevAlpha) { ctx.globalAlpha = alpha; prevAlpha = alpha; }
+
+        ctx.drawImage(
+          atlas,
+          tile * tileW, 0, tileW, tileH,
+          Math.round(x * cpw), py, tileW, tileH
+        );
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- main loop ---------- */
+
+  var rafId = 0, last = 0;
+
+  function step(dt) {
+    // pointer-derived tilt for donut, in -1..1
+    var tiltX = 0, tiltY = 0;
+    if (pointer.active) {
+      tiltX = (pointer.x / window.innerWidth) * 2 - 1;
+      tiltY = (pointer.y / window.innerHeight) * 2 - 1;
+    }
+    var sp = state.speed;
+    if (state.engine === 'donut')      Donut.render(dt * sp, tiltX, tiltY);
+    else if (state.engine === 'matrix') Matrix.render(dt * sp);
+    else                                Plasma.render(dt * sp);
+    paint();
+  }
+
+  function loop(now) {
+    var dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
+    last = now;
+    step(dt);
+    rafId = window.requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+    last = 0;
+    if (reduce) {
+      // exactly ONE static frame, no rAF loop
+      step(0.016);
+    } else {
       rafId = window.requestAnimationFrame(loop);
     }
+  }
 
-    function start() {
-      if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
-      resize();
-      // prime the background once so the first frames aren't a flash
-      ctx.fillStyle = '#05080a';
-      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
-      if (reduce) {
-        staticFrame();
-      } else {
-        loop();
-      }
+  /* ---------- colour mode application (body class for CSS) ---------- */
+
+  function applyColour() {
+    document.body.classList.toggle('paper', COLOURS[state.colour].paper);
+    document.querySelector('meta[name="theme-color"]')
+      .setAttribute('content', COLOURS[state.colour].bg);
+    atlasDirty = true;
+  }
+
+  /* ---------- URL hash wiring: #e=engine&c=charset&k=colour ---------- */
+
+  function readHash() {
+    var h = (location.hash || '').replace(/^#/, '');
+    if (!h) return;
+    var parts = h.split('&');
+    for (var i = 0; i < parts.length; i++) {
+      var kv = parts[i].split('=');
+      var k = kv[0], val = kv[1];
+      if (k === 'e' && CHARSETS && (val === 'donut' || val === 'matrix' || val === 'plasma')) state.engine = val;
+      else if (k === 'c' && CHARSETS[val]) state.charset = val;
+      else if (k === 'k' && COLOURS[val]) state.colour = val;
     }
+  }
 
-    var resizeTimer = 0;
-    window.addEventListener('resize', function () {
-      window.clearTimeout(resizeTimer);
-      resizeTimer = window.setTimeout(start, 150);
-    });
+  var hashWriteTimer = 0;
+  function writeHash() {
+    window.clearTimeout(hashWriteTimer);
+    hashWriteTimer = window.setTimeout(function () {
+      var h = '#e=' + state.engine + '&c=' + state.charset + '&k=' + state.colour;
+      if (location.hash !== h) {
+        history.replaceState(null, '', h);
+      }
+    }, 120);
+  }
 
-    start();
-  })();
+  /* ---------- control wiring ---------- */
+
+  var engBtns = {
+    donut:  document.getElementById('eng-donut'),
+    matrix: document.getElementById('eng-matrix'),
+    plasma: document.getElementById('eng-plasma')
+  };
+  var selCharset = document.getElementById('sel-charset');
+  var selColour  = document.getElementById('sel-colour');
+  var slSpeed    = document.getElementById('sl-speed');
+  var slCell     = document.getElementById('sl-cell');
+  var slContrast = document.getElementById('sl-contrast');
+
+  function syncControls() {
+    for (var key in engBtns) {
+      engBtns[key].setAttribute('aria-pressed', key === state.engine ? 'true' : 'false');
+    }
+    selCharset.value = state.charset;
+    selColour.value  = state.colour;
+    slSpeed.value    = Math.round(state.speed * 100);
+    slCell.value     = state.cell;
+    slContrast.value = Math.round(state.contrast * 100);
+    slSpeed.setAttribute('aria-valuetext', Math.round(state.speed * 100) + ' percent');
+    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
+    slContrast.setAttribute('aria-valuetext', Math.round(state.contrast * 100) + ' percent');
+  }
+
+  function setEngine(e) {
+    if (state.engine === e) return;
+    state.engine = e;
+    atlasDirty = true; // matrix needs its glyph set baked
+    syncControls();
+    writeHash();
+    if (reduce) start(); // re-render the single static frame
+  }
+
+  for (var key in engBtns) {
+    (function (e, btn) {
+      btn.addEventListener('click', function () { setEngine(e); });
+    })(key, engBtns[key]);
+  }
+
+  selCharset.addEventListener('change', function () {
+    state.charset = selCharset.value;
+    atlasDirty = true;
+    writeHash();
+    if (reduce) start();
+  });
+
+  selColour.addEventListener('change', function () {
+    state.colour = selColour.value;
+    applyColour();
+    writeHash();
+    if (reduce) start();
+  });
+
+  slSpeed.addEventListener('input', function () {
+    state.speed = (+slSpeed.value) / 100;
+    slSpeed.setAttribute('aria-valuetext', slSpeed.value + ' percent');
+    if (reduce) start();
+  });
+
+  slCell.addEventListener('input', function () {
+    state.cell = +slCell.value;
+    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
+    resize();
+    if (reduce) start();
+  });
+
+  slContrast.addEventListener('input', function () {
+    state.contrast = (+slContrast.value) / 100;
+    slContrast.setAttribute('aria-valuetext', slContrast.value + ' percent');
+    if (reduce) start();
+  });
+
+  document.getElementById('btn-hide').addEventListener('click', function () {
+    document.body.classList.add('barhidden');
+    document.getElementById('btn-show').focus();
+  });
+  document.getElementById('btn-show').addEventListener('click', function () {
+    document.body.classList.remove('barhidden');
+    document.getElementById('btn-hide').focus();
+  });
+
+  // pointer reactivity
+  function onPointer(ev) {
+    pointer.active = true;
+    pointer.x = ev.clientX;
+    pointer.y = ev.clientY;
+    pointer.gx = (ev.clientX / cw) | 0;
+    pointer.gy = (ev.clientY / ch) | 0;
+    if (reduce) start();
+  }
+  window.addEventListener('pointermove', onPointer, { passive: true });
+  window.addEventListener('pointerdown', onPointer, { passive: true });
+  window.addEventListener('pointerleave', function () { pointer.active = false; });
+
+  window.addEventListener('hashchange', function () {
+    readHash();
+    applyColour();
+    syncControls();
+    resize();
+    if (reduce) start();
+  });
+
+  var resizeTimer = 0;
+  window.addEventListener('resize', function () {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(function () {
+      resize();
+      if (reduce) start();
+    }, 140);
+  });
+
+  /* ---------- boot ---------- */
+
+  readHash();
+  applyColour();
+  syncControls();
+  writeHash();
+  resize();
+  start();
+})();
 </script>
 </body>
 </html>
