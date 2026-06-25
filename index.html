@@ -99,13 +99,14 @@
     display:flex;
     flex-direction:column;
     align-items:stretch;
-    gap:14px;
-    padding:16px 16px 14px;
+    gap:16px;
+    padding:18px 16px 14px;
     overflow-y:auto;
     overscroll-behavior:contain;
-    /* matt-black instrument chrome — a fixed neutral panel, decoupled from the
-       art theme: override the colour tokens locally so every control in the rail
-       resolves white-on-matt-black, while the stage/art keeps the active theme. */
+    /* dark brushed-metal instrument faceplate — a fixed neutral panel, decoupled
+       from the art theme: override the colour tokens locally so every control in
+       the rail resolves white-on-dark-metal, while the stage/art keeps the active
+       theme. (Sibling to Fluid's --panel-metal, ported to ASCII's dark palette.) */
     --ink:#f5f5f6;
     --ink-rgb:245,245,246;
     --ink-dim:#9a9a9e;
@@ -114,9 +115,23 @@
     --tab-bg-on:#f5f5f6;
     color:var(--ink);
     text-shadow:none;
-    border-right:1px solid var(--ink-faint);
-    background:#0b0b0c;
+    /* hairline border-right + a faint top inset highlight on a vertical metal
+       gradient, with a very-subtle vertical brushed texture layered on top. */
+    border-right:1px solid rgba(255,255,255,.10);
+    background-color:#101116;
+    background-image:
+      linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,0) 22%),
+      repeating-linear-gradient(90deg,
+        rgba(255,255,255,.022) 0, rgba(255,255,255,.022) 1px,
+        rgba(0,0,0,.05) 2px, rgba(0,0,0,.05) 3px),
+      linear-gradient(180deg, #16171c 0%, #121319 52%, #0f1014 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.07),
+      inset -1px 0 0 rgba(0,0,0,.5);
   }
+  .topbar::-webkit-scrollbar{width:7px;height:7px}
+  .topbar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:7px}
+  .topbar::-webkit-scrollbar-track{background:transparent}
   h1.wordmark{
     font-size:18px;
     font-weight:700;
@@ -165,123 +180,163 @@
     font-size:9px;
     letter-spacing:.22em;
     text-transform:uppercase;
-    opacity:.6;
+    opacity:.55;
     user-select:none;
   }
 
-  /* tab + button — all >=32px hit targets */
-  .tabs{ display:flex; flex-wrap:wrap; gap:3px; }
+  /* ---- EMBOSSED METAL TILES — raised, tactile button tiles laid out in a grid.
+     Ported from Fluid's .fieldBtn: a face gradient (lighter top), a 1px hairline
+     border, an inset top-highlight + a drop shadow; :hover lifts, :active presses,
+     aria-pressed="true" lights/presses in. Monochrome white-on-dark-metal. ---- */
+  .tabs{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+  }
+  .tabs.cols2{ grid-template-columns:repeat(2,minmax(0,1fr)); }
   .tab, .btn{
     appearance:none;
     -webkit-appearance:none;
     font-family:var(--mono);
-    font-size:12px;
+    font-size:11px;
     letter-spacing:.06em;
     color:var(--ink);
-    background:var(--tab-bg);
-    border:1px solid var(--ink-faint);
-    min-height:32px;
+    width:100%;
+    min-height:34px;
     min-width:32px;
-    padding:0 11px;
+    padding:0 8px;
     cursor:pointer;
     text-shadow:none;
-    border-radius:2px;
-    transition:background .12s, border-color .12s;
+    border-radius:6px;
+    border:1px solid rgba(255,255,255,.10);
+    background-image:linear-gradient(180deg, #2a2c34 0%, #1b1c22 52%, #151620 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.10),
+      0 1px 2px rgba(0,0,0,.55);
+    transition:transform .08s ease, box-shadow .12s ease, background-image .12s ease, color .12s ease;
   }
-  .tab:hover, .btn:hover{ background:var(--tab-bg-hover); }
+  .tab:hover, .btn:hover{
+    transform:translateY(-1px);
+    background-image:linear-gradient(180deg, #32343d 0%, #202128 52%, #181923 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.14),
+      0 4px 9px rgba(0,0,0,.55);
+  }
+  .tab:active, .btn:active{
+    transform:translateY(1px);
+    box-shadow:
+      inset 0 1px 3px rgba(0,0,0,.6),
+      0 1px 1px rgba(0,0,0,.4);
+  }
+  /* LIT / pressed-in state: brighter face + white-on-dark text + inset shadow */
   .tab[aria-pressed="true"]{
-    background:var(--tab-bg-on);
-    border-color:var(--ink);
-    box-shadow:var(--ctl-glow);
+    color:#0b0b0c;
+    background-image:linear-gradient(180deg, #ffffff 0%, #e7e7ea 60%, #d2d2d6 100%);
+    border-color:rgba(255,255,255,.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.7),
+      inset 0 -2px 5px rgba(0,0,0,.18),
+      0 1px 2px rgba(0,0,0,.5);
   }
-  /* in the matt-black rail a pressed chip fills white → use dark text for contrast */
-  .topbar .tab[aria-pressed="true"]{ color:#0b0b0c; }
-  /* crisp white outlines on the rail's boxes (chips / buttons / select) */
-  .topbar .tab, .topbar .btn, .topbar select{ border-color:var(--ink); }
-
-  select{
-    appearance:none;
-    -webkit-appearance:none;
-    font-family:var(--mono);
-    font-size:12px;
-    color:var(--ink);
-    background:var(--tab-bg);
-    border:1px solid var(--ink-faint);
-    min-height:32px;
-    padding:0 26px 0 9px;
-    cursor:pointer;
-    border-radius:2px;
-    text-shadow:none;
-    background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),linear-gradient(135deg,var(--ink) 50%,transparent 50%);
-    background-position:calc(100% - 14px) 13px, calc(100% - 9px) 13px;
-    background-size:5px 5px,5px 5px;
-    background-repeat:no-repeat;
-  }
-
-  /* sliders — stacked full-width inside the rail */
-  .group.sliders{
-    flex-direction:column;
-    align-items:stretch;
-    gap:8px;
-  }
-  .slider{
-    display:flex;
-    align-items:center;
-    gap:7px;
-  }
-  .slider label{
-    font-size:9px;
-    letter-spacing:.18em;
-    text-transform:uppercase;
-    opacity:.62;
-    white-space:nowrap;
-  }
-  .slider .val{
-    font-size:11px;
-    font-variant-numeric:tabular-nums;
-    min-width:2.4em;
-    text-align:right;
-    opacity:.82;
-    white-space:nowrap;
-  }
-  input[type="range"]{
-    -webkit-appearance:none;
-    appearance:none;
-    width:auto;
-    flex:1;
-    min-width:0;
-    height:32px;
-    background:transparent;
-    cursor:pointer;
-  }
-  input[type="range"]::-webkit-slider-runnable-track{
-    height:2px;
-    background:var(--ink-faint);
-  }
-  input[type="range"]::-moz-range-track{
-    height:2px;
-    background:var(--ink-faint);
-  }
-  input[type="range"]::-webkit-slider-thumb{
-    -webkit-appearance:none;
-    appearance:none;
-    width:12px;height:12px;
-    margin-top:-5px;
-    border-radius:50%;
-    background:var(--ink);
-    box-shadow:var(--ctl-glow);
-  }
-  input[type="range"]::-moz-range-thumb{
-    width:12px;height:12px;
-    border:none;border-radius:50%;
-    background:var(--ink);
-    box-shadow:var(--ctl-glow);
+  .tab[aria-pressed="true"]:hover{
+    background-image:linear-gradient(180deg, #ffffff 0%, #ededf0 60%, #d8d8dc 100%);
   }
 
   /* uniform, always-visible focus ring */
-  .tab:focus-visible, .btn:focus-visible, select:focus-visible, input:focus-visible{
+  .tab:focus-visible, .btn:focus-visible, .knob:focus-visible, input:focus-visible{
     outline:2px solid var(--ink);
     outline-offset:2px;
+  }
+
+  /* ---- KNOBS — three circular dark-metal dials in a row (Speed / Cell /
+     Contrast). Ported from Fluid's .knob: a radial-gradient metal face, an inset
+     highlight rim, and a WHITE indicator dot that rotates across a ~270° sweep.
+     A visually-hidden <input type=range> holds the real value (keyboard + a11y +
+     existing 'input' handlers); the knob drives it. ~44px face. ---- */
+  .knobgrid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+  }
+  .knobctl{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:5px;
+    position:relative;
+  }
+  /* visually-hidden range — keeps keyboard + screen-reader + 'input' handlers */
+  .knobctl input[type="range"]{
+    position:absolute;
+    width:1px;height:1px;
+    opacity:0;
+    pointer-events:none;
+    margin:0;padding:0;
+    overflow:hidden;
+  }
+  .knob{
+    width:46px;height:46px;
+    position:relative;
+    border-radius:50%;
+    cursor:pointer;
+    touch-action:none;
+    -webkit-user-select:none;user-select:none;
+    /* dark brushed-metal dial: glossy top rim, deep recessed face */
+    background:
+      radial-gradient(circle at 50% 32%, rgba(255,255,255,.16), rgba(255,255,255,0) 46%),
+      radial-gradient(circle at 50% 50%, #2b2d36 0%, #1a1b22 58%, #0d0e13 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.16),
+      inset 0 -6px 12px rgba(0,0,0,.6),
+      0 3px 7px rgba(0,0,0,.55),
+      0 1px 0 rgba(255,255,255,.06);
+  }
+  .knob::before{
+    /* recessed glass face inside a thin chrome rim */
+    content:"";
+    position:absolute;inset:8px;
+    border-radius:50%;
+    background:radial-gradient(circle at 46% 34%, #23242c, #121319 70%, #0a0b10 100%);
+    box-shadow:
+      inset 0 1px 2px rgba(0,0,0,.7),
+      inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  /* rotating indicator: a layer that turns; the white dot sits near its top */
+  .knob-dial{
+    position:absolute;inset:0;
+    border-radius:50%;
+    z-index:2;
+    transform:rotate(-135deg);
+    transition:transform .06s linear;
+  }
+  .knob-dial::after{
+    content:"";
+    position:absolute;
+    left:50%;top:6px;
+    width:5px;height:5px;
+    margin-left:-2.5px;
+    border-radius:50%;
+    background:#f5f5f6;
+    box-shadow:0 0 4px rgba(245,245,246,.6), 0 1px 1px rgba(0,0,0,.6);
+  }
+  .knoblabel{
+    text-align:center;
+    line-height:1.2;
+  }
+  .knoblabel .knm{
+    display:block;
+    font-size:8px;
+    letter-spacing:.16em;
+    text-transform:uppercase;
+    opacity:.55;
+  }
+  .knoblabel .val{
+    display:block;
+    font-size:11px;
+    font-weight:700;
+    font-variant-numeric:tabular-nums;
+    opacity:.92;
+    margin-top:1px;
   }
 
   /* hide-bar toggle pinned bottom-right so the bar can vanish for clean view */
@@ -336,7 +391,8 @@
   .tab.recording{
     border-color:#ff4d4d;
     color:#ff8a8a;
-    box-shadow:0 0 8px rgba(255,77,77,.5);
+    background-image:linear-gradient(180deg, #2a2c34 0%, #1b1c22 52%, #151620 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 8px rgba(255,77,77,.5);
   }
   .tab.recording::before{
     content:"";
@@ -390,6 +446,11 @@
     .wordmark .blip{animation:none}
     .tab.recording::before{animation:none}
     .toast{transition:none}
+    /* no transform/shift transitions when motion is reduced */
+    .tab, .btn{transition:box-shadow .12s ease, background-image .12s ease, color .12s ease}
+    .tab:hover, .btn:hover{transform:none}
+    .tab:active, .btn:active{transform:none}
+    .knob-dial{transition:none}
   }
 
   /* MOBILE — the rail becomes a full-width top strip (a translucent overlay) over
@@ -399,12 +460,18 @@
     :root{ --panel-w:0px; }              /* stage goes full-bleed under the strip */
     .topbar{
       right:0; bottom:auto;
-      width:auto; height:auto;
+      width:100vw; max-width:100vw; height:auto;
       max-height:64vh;
       border-right:none;
       border-bottom:1px solid var(--ink-faint);
     }
     .controls{ gap:12px; }
+    /* phone: flex-wrap the metal tiles + knobs so they adapt to ANY container
+       width and never clip — fixed grid columns are rigid, flex-wrap is not. */
+    .tabs, .tabs.cols2{ display:flex; flex-wrap:wrap; gap:6px; }
+    .tabs .tab, .tabs .btn{ flex:1 1 96px; }
+    .knobgrid{ display:flex; flex-wrap:wrap; gap:14px 20px; justify-content:flex-start; }
+    .knobctl{ flex:0 0 auto; }
   }
 </style>
 </head>
@@ -446,21 +513,24 @@
       </div>
     </div>
 
-    <div class="group sliders">
-      <div class="slider">
-        <label for="sl-speed">Speed</label>
-        <input type="range" id="sl-speed" min="0" max="200" value="100" aria-label="Speed" aria-valuetext="100 percent">
-        <span class="val" id="val-speed">100</span>
-      </div>
-      <div class="slider">
-        <label for="sl-cell">Cell</label>
-        <input type="range" id="sl-cell" min="7" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
-        <span class="val" id="val-cell">12</span>
-      </div>
-      <div class="slider">
-        <label for="sl-contrast">Contrast</label>
-        <input type="range" id="sl-contrast" min="40" max="220" value="100" aria-label="Contrast" aria-valuetext="100 percent">
-        <span class="val" id="val-contrast">100</span>
+    <div class="group">
+      <span class="lab" id="lab-knobs">Motion</span>
+      <div class="knobgrid">
+        <div class="knobctl">
+          <div class="knob" data-for="sl-speed" role="slider" tabindex="0" aria-label="Speed"><span class="knob-dial"></span></div>
+          <input type="range" id="sl-speed" min="0" max="200" value="100" aria-label="Speed" aria-valuetext="100 percent">
+          <div class="knoblabel"><span class="knm">Speed</span><span class="val" id="val-speed">100</span></div>
+        </div>
+        <div class="knobctl">
+          <div class="knob" data-for="sl-cell" role="slider" tabindex="0" aria-label="Cell size in pixels"><span class="knob-dial"></span></div>
+          <input type="range" id="sl-cell" min="7" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
+          <div class="knoblabel"><span class="knm">Cell</span><span class="val" id="val-cell">12</span></div>
+        </div>
+        <div class="knobctl">
+          <div class="knob" data-for="sl-contrast" role="slider" tabindex="0" aria-label="Contrast"><span class="knob-dial"></span></div>
+          <input type="range" id="sl-contrast" min="40" max="220" value="100" aria-label="Contrast" aria-valuetext="100 percent">
+          <div class="knoblabel"><span class="knm">Contrast</span><span class="val" id="val-contrast">100</span></div>
+        </div>
       </div>
     </div>
 
@@ -487,7 +557,7 @@
 
     <div class="group">
       <span class="lab" id="lab-export">Export</span>
-      <div class="tabs" role="group" aria-labelledby="lab-export">
+      <div class="tabs cols2" role="group" aria-labelledby="lab-export">
         <button class="tab" id="exp-txt" type="button" aria-label="Download as plain text">txt</button>
         <button class="tab" id="exp-ans" type="button" aria-label="Download as ANSI colour text">ans</button>
         <button class="tab" id="exp-png" type="button" aria-label="Download as PNG image">png</button>
@@ -1306,6 +1376,84 @@
     }, 1600);
   }
 
+  /* ---------- rotary knobs — a tactile dark-metal dial layered over a hidden
+     range input. Ported from Fluid: pointer drag (vertical, up = increase) turns
+     the value; the indicator rotates over a 270° sweep with a gap at the bottom.
+     Driving the native input (set .value + dispatch a real 'input' event) reuses
+     EVERY existing path — the slider 'input' handlers fire, state + writeHash run
+     exactly as before. Keyboard arrows hit the real range input directly. ---- */
+  var knobRefreshers = [];
+  function refreshKnobs() {
+    for (var i = 0; i < knobRefreshers.length; i++) knobRefreshers[i]();
+  }
+  function makeKnob(knobEl) {
+    var input = document.getElementById(knobEl.getAttribute('data-for'));
+    if (!input) return;
+    var dial = knobEl.querySelector('.knob-dial');
+    var min = parseFloat(input.min), max = parseFloat(input.max);
+    var step = parseFloat(input.step) || 1;
+    var START = -135, SWEEP = 270;   // 270° sweep, gap centred at the bottom
+
+    function refresh() {
+      var frac = (parseFloat(input.value) - min) / (max - min || 1);
+      frac = Math.max(0, Math.min(1, frac));
+      dial.style.transform = 'rotate(' + (START + frac * SWEEP) + 'deg)';
+      knobEl.setAttribute('aria-valuenow', input.value);
+      knobEl.setAttribute('aria-valuemin', input.min);
+      knobEl.setAttribute('aria-valuemax', input.max);
+    }
+    function commit(v) {
+      v = Math.max(min, Math.min(max, v));
+      if (step) v = Math.round(v / step) * step;
+      v = Math.max(min, Math.min(max, v));
+      if (String(v) !== input.value) {
+        input.value = String(v);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      refresh();
+    }
+    // VERTICAL DRAG: up = increase. Track the gesture from the press point so the
+    // whole range is reachable in roughly one panel-height of travel.
+    var dragging = false, startY = 0, startVal = 0;
+    var span = max - min;
+    knobEl.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      startY = e.clientY;
+      startVal = parseFloat(input.value);
+      try { knobEl.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
+    });
+    knobEl.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var dy = startY - e.clientY;          // up is positive
+      commit(startVal + (dy / 160) * span); // ~160px of travel == full range
+      e.preventDefault();
+    });
+    function end(e) {
+      if (!dragging) return;
+      dragging = false;
+      try { knobEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    knobEl.addEventListener('pointerup', end);
+    knobEl.addEventListener('pointercancel', end);
+    // keyboard on the dial mirrors the range (the real input also stays reachable)
+    knobEl.addEventListener('keydown', function (e) {
+      var d = 0;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowRight') d = step;
+      else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') d = -step;
+      else if (e.key === 'Home') { commit(min); e.preventDefault(); return; }
+      else if (e.key === 'End') { commit(max); e.preventDefault(); return; }
+      else return;
+      commit(parseFloat(input.value) + d);
+      e.preventDefault();
+    });
+    input.addEventListener('input', refresh);
+    knobRefreshers.push(refresh);
+    refresh();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.knob[data-for]'), makeKnob);
+
   /* ---------- record button active state ---------- */
   function setRecUI(on) {
     if (!btnRec) return;
@@ -1363,6 +1511,7 @@
     valSpeed.textContent    = sp;
     valCell.textContent     = state.cell;
     valContrast.textContent = co;
+    refreshKnobs();
   }
 
   function syncControls() {
