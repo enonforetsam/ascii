@@ -1703,6 +1703,7 @@
   function applyPreset(name) {
     var p = LOOKS[name];
     if (!p) return;
+    Image_.setImage(null);   // a LOOK is a clean generative preset — drop any inserted image
     state.engine   = p.e;
     if (p.c) state.charset = p.c;
     else state.charset = (p.e === 'donut') ? 'donut' : 'standard';
