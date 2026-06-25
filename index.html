@@ -29,6 +29,8 @@
     --tab-bg:rgba(var(--ink-rgb),.06);
     --tab-bg-hover:rgba(var(--ink-rgb),.16);
     --tab-bg-on:rgba(var(--ink-rgb),.24);
+    /* width of the Fluid-style left rail; collapses to 0 when hidden/mobile */
+    --panel-w:clamp(224px, 23vw, 300px);
   }
   body[data-theme="amber"]{
     --bg:#0a0600;  --bg-rgb:10,6,0;
@@ -58,10 +60,15 @@
     text-shadow:var(--glow);
   }
 
+  /* the STAGE — offset by the left rail so the art lives BESIDE the panel,
+     never under it. <canvas> is a replaced element (intrinsic 300x150), so
+     left+right+top+bottom alone DON'T stretch it — give it an explicit size:
+     width = viewport minus the rail, height = full viewport. */
   #art{
     position:fixed;
-    inset:0;
-    width:100%;
+    left:var(--panel-w);
+    top:0;
+    width:calc(100% - var(--panel-w));
     height:100%;
     display:block;
     z-index:0;
@@ -69,7 +76,10 @@
 
   .vignette{
     position:fixed;
-    inset:0;
+    left:var(--panel-w);
+    right:0;
+    top:0;
+    bottom:0;
     z-index:1;
     pointer-events:none;
     background:radial-gradient(120% 100% at 50% 50%,
@@ -78,16 +88,27 @@
       rgba(var(--bg-rgb),.9) 100%);
   }
 
-  /* compact top bar — the wordmark shrunk from the M0 splash */
+  /* Fluid-style LEFT RAIL — a fixed-width vertical control column pinned to the
+     left edge, full height, internal scroll, border-right. The wordmark sits at
+     the top; controls stack below. */
   .topbar{
     position:fixed;
-    top:0;left:0;right:0;
+    left:0;top:0;bottom:0;
+    width:var(--panel-w);
     z-index:4;
     display:flex;
-    align-items:center;
+    flex-direction:column;
+    align-items:stretch;
     gap:14px;
-    padding:9px 14px;
-    background:linear-gradient(to bottom, rgba(var(--bg-rgb),.82), rgba(var(--bg-rgb),.5) 70%, rgba(var(--bg-rgb),0));
+    padding:16px 16px 14px;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    border-right:1px solid var(--ink-faint);
+    background:
+      linear-gradient(rgba(var(--ink-rgb),.03), rgba(var(--ink-rgb),.03)),
+      rgba(var(--bg-rgb),.78);
+    backdrop-filter:blur(3px);
+    -webkit-backdrop-filter:blur(3px);
   }
   h1.wordmark{
     font-size:18px;
@@ -118,18 +139,19 @@
   }
   @media (max-width:720px){ .sub{display:none} }
 
-  /* control bar */
+  /* controls — stacked vertically inside the rail */
   .controls{
-    margin-left:auto;
+    margin-left:0;
     display:flex;
-    flex-wrap:wrap;
-    align-items:center;
-    gap:10px 14px;
-    justify-content:flex-end;
+    flex-direction:column;
+    align-items:stretch;
+    gap:14px;
+    justify-content:flex-start;
   }
   .group{
     display:flex;
-    align-items:center;
+    flex-direction:column;
+    align-items:stretch;
     gap:6px;
   }
   .group > .lab{
@@ -141,7 +163,7 @@
   }
 
   /* tab + button — all >=32px hit targets */
-  .tabs{ display:flex; gap:3px; }
+  .tabs{ display:flex; flex-wrap:wrap; gap:3px; }
   .tab, .btn{
     appearance:none;
     -webkit-appearance:none;
@@ -185,7 +207,12 @@
     background-repeat:no-repeat;
   }
 
-  /* sliders */
+  /* sliders — stacked full-width inside the rail */
+  .group.sliders{
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
+  }
   .slider{
     display:flex;
     align-items:center;
@@ -209,7 +236,9 @@
   input[type="range"]{
     -webkit-appearance:none;
     appearance:none;
-    width:84px;
+    width:auto;
+    flex:1;
+    min-width:0;
     height:32px;
     background:transparent;
     cursor:pointer;
@@ -251,12 +280,14 @@
     z-index:4;
     display:none;
   }
+  /* hidden state: collapse the rail to 0 so the stage expands full-width */
+  body.barhidden{ --panel-w:0px; }
   body.barhidden .topbar{ display:none; }
   body.barhidden .reveal{ display:block; }
 
   footer{
     position:fixed;
-    left:0;right:0;bottom:0;
+    left:var(--panel-w);right:0;bottom:0;
     z-index:4;
     display:flex;
     justify-content:space-between;
@@ -273,7 +304,10 @@
 
   .scanlines{
     position:fixed;
-    inset:0;
+    left:var(--panel-w);
+    right:0;
+    top:0;
+    bottom:0;
     z-index:3;
     pointer-events:none;
     background:repeating-linear-gradient(
@@ -290,9 +324,20 @@
   @media (prefers-reduced-motion: reduce){
     .wordmark .blip{animation:none}
   }
-  @media (max-width:560px){
-    .controls{ gap:8px 10px; }
-    .group.sliders .slider:nth-child(n+3){ display:none; }
+
+  /* MOBILE — the rail becomes a full-width top strip (a translucent overlay) over
+     a full-bleed stage. Groups stay vertical so chips always wrap; nothing can
+     overflow horizontally. The strip scrolls internally if tall. */
+  @media (max-width:680px){
+    :root{ --panel-w:0px; }              /* stage goes full-bleed under the strip */
+    .topbar{
+      right:0; bottom:auto;
+      width:auto; height:auto;
+      max-height:64vh;
+      border-right:none;
+      border-bottom:1px solid var(--ink-faint);
+    }
+    .controls{ gap:12px; }
   }
 </style>
 </head>
@@ -409,6 +454,8 @@
 
   // grid + reusable typed arrays (the character buffer — source of truth)
   var dpr = 1, cw = 12, ch = 12, cols = 0, rows = 0, gridN = 0;
+  // stage geometry (the canvas rect, NOT the window) — left rail offset aware
+  var rectL = 0, rectT = 0, vw = 1, vh = 1;
   var lum = null;     // Float32Array, 0..1 intensity per cell
   var glyph = null;   // Uint32Array, forced code point per cell; 0 => derive from ramp
 
@@ -472,12 +519,17 @@
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = window.innerWidth, h = window.innerHeight;
+    // measure the CANVAS (CSS sizes it via the left+right offsets), not the
+    // window — so the stage is the area BESIDE the rail. Store rect for pointer
+    // mapping and donut tilt.
+    var r = canvas.getBoundingClientRect();
+    rectL = r.left; rectT = r.top;
+    vw = Math.max(1, r.width); vh = Math.max(1, r.height);
+    var w = vw, h = vh;
 
+    // only set the BITMAP from the measured CSS size; let CSS own the element box
     canvas.width  = Math.max(1, Math.floor(w * dpr));
     canvas.height = Math.max(1, Math.floor(h * dpr));
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
 
     cw = state.cell;
     ch = state.cell;
@@ -772,8 +824,8 @@
     // pointer-derived tilt for donut, in -1..1
     var tiltX = 0, tiltY = 0;
     if (pointer.active) {
-      tiltX = (pointer.x / window.innerWidth) * 2 - 1;
-      tiltY = (pointer.y / window.innerHeight) * 2 - 1;
+      tiltX = Math.max(-1, Math.min(1, (pointer.x / vw) * 2 - 1));
+      tiltY = Math.max(-1, Math.min(1, (pointer.y / vh) * 2 - 1));
     }
     var sp = state.speed;
     if (state.engine === 'donut')      Donut.render(dt * sp, tiltX, tiltY);
@@ -974,11 +1026,15 @@
     document.body.classList.add('barhidden');
     btnHide.setAttribute('aria-pressed', 'true');
     btnShow.focus();
+    resize();   // stage just grew to full width — re-fit the canvas
+    start();    // repaint immediately (reduced-motion has no rAF loop)
   }
   function showBar() {
     document.body.classList.remove('barhidden');
     btnHide.setAttribute('aria-pressed', 'false');
     btnHide.focus();
+    resize();   // stage shrank back beside the rail — re-fit the canvas
+    start();
   }
   btnHide.addEventListener('click', hideBar);
   btnShow.addEventListener('click', showBar);
@@ -996,10 +1052,11 @@
   // pointer reactivity
   function onPointer(ev) {
     pointer.active = true;
-    pointer.x = ev.clientX;
-    pointer.y = ev.clientY;
-    pointer.gx = (ev.clientX / cw) | 0;
-    pointer.gy = (ev.clientY / ch) | 0;
+    // stage-relative: subtract the rail offset so cell 0,0 is the stage corner
+    pointer.x = ev.clientX - rectL;
+    pointer.y = ev.clientY - rectT;
+    pointer.gx = (pointer.x / cw) | 0;
+    pointer.gy = (pointer.y / ch) | 0;
     if (reduce) start();
   }
   window.addEventListener('pointermove', onPointer, { passive: true });
