@@ -409,6 +409,19 @@
     mix-blend-mode:multiply;
     opacity:var(--scan-op);
   }
+  /* On a dark stage the dark multiply lines vanish (black on black). Switch to
+     faint LIGHT lines so the CRT scanline texture reads in black mode too
+     (black is the default bg). Creme mode keeps the dark multiply lines above. */
+  body[data-bg="black"] .scanlines{
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0) 0,
+      rgba(255,255,255,0) 2px,
+      rgba(255,255,255,.16) 3px,
+      rgba(255,255,255,.16) 4px
+    );
+    mix-blend-mode:normal;
+  }
 
   /* STAGE BACKGROUND toggle — a compact pill pinned to the TOP-RIGHT of the stage
      (right of the rail, above scanlines/vignette). Two circular swatches (black /
@@ -2850,6 +2863,7 @@
      every toggle click. */
   function applyBg() {
     var b = BG[state.bg] || BG.black;
+    document.body.dataset.bg = state.bg;   // lets CSS adapt the scanlines to the stage bg
     document.body.style.setProperty('--stage-bg-rgb', b.rgb);
     var meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', b.hex);
