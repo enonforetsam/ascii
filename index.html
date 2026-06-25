@@ -2320,6 +2320,105 @@
     return { W: W, H: H, lit: lit, has: function (ch) { return !!glyphFor(ch); } };
   })();
 
+  /* ====================================================================
+     SHARED WORD-WRAP — size-maximizing multi-line layout. Used by BOTH word
+     layout paths (the VECTOR text mask + the BITMAP 5x7 path) so a long word
+     stays legible: instead of squeezing the whole string onto ONE line (width
+     binds -> microscopic), we try L = 1,2,3,… lines and keep the L whose
+     rendered glyph size is LARGEST while fitting the available width AND height.
+
+     wrapToLines(words, L): pack the whitespace tokens into <= L lines preferring
+     SPACE breaks; a SINGLE long token with no spaces is split into ~equal
+     CHARACTER chunks across the lines (e.g. SUPERCALIFRAGILISTIC -> SUPERCALI /
+     FRAGILIS / TIC). Returns an array of line strings (length <= L).
+
+     chooseWrap(words, charAspect, availW, availH, cap): evaluate every L
+     and return { lines, size } maximizing
+        size = min( availW / (maxLineChars * charAspect), availH / L ).
+     A short word that already fits stays 1 line (best size is at L=1), unchanged.
+     ==================================================================== */
+
+  // split a single spaceless token into L roughly-equal character chunks.
+  function chunkToken(tok, L) {
+    if (L <= 1 || tok.length <= 1) return [tok];
+    if (L > tok.length) L = tok.length;
+    var out = [], n = tok.length, base = Math.ceil(n / L), pos = 0;
+    // ceil-sized chunks first so earlier lines are the widest (maxLineChars is
+    // then chunk0's length); this keeps lines balanced and never exceeds base.
+    for (var i = 0; i < L && pos < n; i++) {
+      var remLines = L - i, rem = n - pos;
+      var take = Math.ceil(rem / remLines);
+      out.push(tok.substr(pos, take));
+      pos += take;
+    }
+    return out;
+  }
+
+  // pack tokens into <= L lines. Multi-token text greedily wraps at spaces so
+  // each line holds whole words and the L lines are as balanced as possible by
+  // char length. A single token is character-chunked. Returns line strings.
+  function wrapToLines(words, L) {
+    if (L <= 1) return [words.join(' ')];
+    if (words.length === 1) return chunkToken(words[0], L);
+    // total chars (words + single spaces) -> a per-line char target
+    var total = 0;
+    for (var i = 0; i < words.length; i++) total += words[i].length;
+    total += (words.length - 1); // the joining spaces
+    var target = total / L;
+    var lines = [], cur = '', linesLeft = L;
+    for (var w = 0; w < words.length; w++) {
+      var word = words[w];
+      var wordsLeft = words.length - w;
+      // if we must leave room for the remaining words to each get a line, flush
+      if (cur && linesLeft > 1 && wordsLeft <= linesLeft - 1) {
+        lines.push(cur); cur = ''; linesLeft--;
+      }
+      var cand = cur ? cur + ' ' + word : word;
+      if (!cur) { cur = word; }
+      else if (linesLeft > 1 && cand.length > target && cur.length >= word.length * 0.4) {
+        lines.push(cur); cur = word; linesLeft--;
+      } else { cur = cand; }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  // choose the L (and its line breaks) that MAXIMIZES the rendered glyph size:
+  //   size(L) = min( availW / (maxLineChars * charAspect), availH / L )
+  // (charAspect = glyph width / height; availW, availH in the SAME units.)
+  // A short word naturally peaks near L=1; a long word peaks at more lines.
+  //
+  // SINGLE-WORD GUARD: a lone token is only character-chunked when 1 line is
+  // BADLY squeezed — i.e. when wrapping makes it substantially (>= ~1.8x) bigger.
+  // A short word like ASCII fills the width fine on one line (the multi-line gain
+  // is small) so it stays 1 line, unchanged; a long word like SUPERCALIFRAGILISTIC
+  // is microscopic on one line (multi-line is many× bigger) so it wraps. Multi-
+  // word phrases always wrap by the pure maximize rule (sentence wraps word-by-word).
+  var SINGLE_WRAP_GAIN = 1.8;
+  function chooseWrap(words, charAspect, availW, availH, cap) {
+    if (availW <= 0 || availH <= 0) return { lines: [words.join(' ')], size: 0, L: 1 };
+    var hardCap = Math.min(cap, Math.max(1, words.length === 1 ? words[0].length : 64));
+    function evalL(L) {
+      var lines = wrapToLines(words, L);
+      var maxChars = 0;
+      for (var i = 0; i < lines.length; i++) if (lines[i].length > maxChars) maxChars = lines[i].length;
+      if (maxChars < 1) maxChars = 1;
+      var size = Math.min(availW / (maxChars * charAspect), availH / lines.length);
+      return { lines: lines, size: size, L: lines.length };
+    }
+    var single = (words.length === 1);
+    var one = evalL(1);
+    var best = null;
+    for (var L = 1; L <= hardCap; L++) {
+      var cand = evalL(L);
+      if (!best || cand.size > best.size + 1e-6) best = cand;
+      if (cand.L < L) break; // ran out of content to split
+    }
+    // single token stays on one line unless wrapping is a big legibility win
+    if (single && best.size < one.size * SINGLE_WRAP_GAIN) return one;
+    return best;
+  }
+
   var Words = (function () {
     var CHAR_ASPECT = 0.5;       // glyph width / height — same model as Image_
     var mask = null;             // Float32Array(gridN): letter coverage 0..1
@@ -2373,14 +2472,20 @@
       var fontStack = '900 PXpx system-ui, -apple-system, "Segoe UI", Roboto, ' +
         'Helvetica, Arial, sans-serif';
 
-      // AUTO-FIT: choose the largest font (per line) so the longest word spans the
-      // width with a small margin, and all lines stack within the height. Wrapping
-      // is by whitespace; each whitespace-token is its own line so long phrases use
-      // the full height rather than overflowing the width.
-      var lines = words;
+      // AUTO-FIT with SIZE-MAXIMIZING WRAP: instead of cramming the whole string
+      // onto one line (width binds -> microscopic for a long word), pick the line
+      // breaks (L lines) that make the glyph size LARGEST while fitting width AND
+      // height. chooseWrap evaluates L = 1,2,3,… (space breaks preferred; a single
+      // long spaceless token is split into ~equal CHARACTER chunks) and returns the
+      // best line list. A short word that already fits stays 1 line (unchanged).
       var marginX = W * 0.06, marginY = H * 0.10;
       var availW = W - marginX * 2, availH = H - marginY * 2;
       var lineGap = 1.06;
+      // char-aspect of this bold sans in the offscreen draw space: ~0.62 of the
+      // line-height per glyph advance. availH carries the lineGap so size/L is the
+      // per-line height budget. CAP lines so we never over-fragment.
+      var wrap = chooseWrap(words, 0.62, availW, availH / lineGap, 16);
+      var lines = wrap.lines;
       // binary-search a font size that fits both axes
       function measureFits(px) {
         octx.font = fontStack.replace('PXpx', px + 'px');
@@ -2463,56 +2568,83 @@
       var WGAP = FW + 1;     // font-pixel columns between words on a line (a space)
       var LGAP = 2;          // font-pixel rows between text lines
 
-      // For a given scale S and max line width (in cells), greedily wrap words
-      // into lines; return the line list (each = array of words) and the pixel
-      // dimensions, or null if even one word overflows the width at this scale.
-      function layout(S, depthD) {
-        // available cells, leaving room for the diagonal extrude depth (down+right)
-        var availCols = cols - depthD;
-        var availRows = rows - depthD;
-        if (availCols < FW * S || availRows < FH * S) return null;
-        // word pixel-width helper (font pixels)
-        function wWidth(w) { return w.length * FW + (w.length - 1) * GAP; }
-        var lines = [], cur = [], curW = 0;
-        for (var i = 0; i < words.length; i++) {
-          var w = words[i];
-          if (wWidth(w) * S > availCols) {
-            // single word too wide at this scale -> fail (caller lowers S)
-            return null;
-          }
-          var add = (cur.length ? WGAP : 0) + wWidth(w);
-          if (cur.length && (curW + add) * S > availCols) {
-            lines.push(cur); cur = [w]; curW = wWidth(w);
-          } else {
-            cur.push(w); curW += add;
-          }
-        }
-        if (cur.length) lines.push(cur);
-        // total pixel height
-        var totH = lines.length * FH + (lines.length - 1) * LGAP;
-        if (totH * S > availRows) return null;
-        // max pixel width across lines
+      // pixel width (font cols) of a string of glyphs incl. inter-glyph GAPs.
+      function strWidth(s) { return s.length * FW + (s.length - 1) * GAP; }
+
+      // For a FIXED set of text lines (array of strings), measure the pixel block
+      // (max line width pw, total height ph in font pixels). Each line is one
+      // string; spaces inside it become a WGAP between the surrounding glyphs.
+      function measureLines(lineStrs) {
         var maxW = 0;
-        for (var li = 0; li < lines.length; li++) {
-          var lw = 0;
-          for (var k = 0; k < lines[li].length; k++) {
-            lw += lines[li][k].length * FW + (lines[li][k].length - 1) * GAP;
-            if (k) lw += WGAP;
+        for (var li = 0; li < lineStrs.length; li++) {
+          var s = lineStrs[li], lw = 0;
+          for (var c = 0; c < s.length; c++) {
+            lw += (c ? GAP : 0);
+            lw += (s.charAt(c) === ' ') ? (WGAP - GAP) : FW;
           }
           if (lw > maxW) maxW = lw;
         }
-        return { lines: lines, pw: maxW, ph: totH, S: S };
+        var totH = lineStrs.length * FH + (lineStrs.length - 1) * LGAP;
+        return { pw: maxW, ph: totH };
       }
 
-      // depth scales with S; estimate before final S is known by trying largest S
-      // down to 1, recomputing depth each time (depth ~ 1.6*S, clamped).
-      var best = null;
-      for (var S = Math.max(rows, cols); S >= 1 && !best; S--) {
-        var D = depthForScale(S);
-        var lay = layout(S, D);
-        if (lay) best = { lay: lay, D: D };
+      // SIZE-MAXIMIZING WRAP: try L = 1,2,3,… line layouts (via the shared
+      // wrapToLines, which breaks at SPACES first and char-chunks a single long
+      // token), and for each compute the largest integer block scale S that fits
+      // BOTH axes after reserving the diagonal extrude depth. Keep the layout with
+      // the LARGEST S (chunkier + more legible). SINGLE-WORD GUARD (mirrors the
+      // vector path): a lone token that ALREADY fits on one line stays on one line
+      // — a short word is unchanged — even if splitting would render bigger; only a
+      // token that overflows at L=1 (S would be 0) is character-chunked, then we
+      // maximize S among the layouts that fit. Multi-word phrases wrap by maximize.
+      // fitS(lineStrs) -> largest integer S that fits both axes incl. extrude depth.
+      function fitS(m) {
+        for (var S = Math.max(rows, cols); S >= 1; S--) {
+          var D = depthForScale(S);
+          if (m.pw * S <= cols - D && m.ph * S <= rows - D &&
+              FW * S <= cols - D && FH * S <= rows - D) return { S: S, D: D };
+        }
+        return null;
       }
-      if (!best) return; // shouldn't happen (S=1 with depth 0-ish always fits-ish)
+      var capL = Math.min(16, Math.max(1, words.length === 1 ? words[0].length : 64));
+      var single = (words.length === 1);
+      // L=1 reference layout (its block scale S is the single-word baseline).
+      var oneLay = null;
+      var mOne = measureLines([words.join(' ')]), fOne = fitS(mOne);
+      if (fOne) oneLay = { lines: [words.join(' ')], pw: mOne.pw, ph: mOne.ph, S: fOne.S, D: fOne.D };
+      // MAXIMIZE the integer block scale S across L = 1..cap (mirrors the vector
+      // path). Keep the layout with the LARGEST S so blocks stay chunky + legible.
+      var best = null;
+      for (var L = 1; L <= capL; L++) {
+        var lineStrs = wrapToLines(words, L);
+        var Lact = lineStrs.length;
+        var m = measureLines(lineStrs);
+        if (m.pw < 1 || m.ph < 1) continue;
+        var f = fitS(m);
+        if (f) {
+          if (!best || f.S > best.S) best = { lines: lineStrs, pw: m.pw, ph: m.ph, S: f.S, D: f.D };
+        }
+        if (Lact < L) break; // no more content to split across lines
+      }
+      // SINGLE-WORD GUARD (mirrors chooseWrap): a lone token stays on ONE line
+      // unless wrapping makes the blocks substantially bigger (S grows >= ~1.8x).
+      // A short word (ASCII) is unchanged; a long word (SUPERCALIFRAGILISTIC) wraps.
+      if (single && oneLay && best && best.S < oneLay.S * 1.8) best = oneLay;
+      if (single && !best && oneLay) best = oneLay;
+      if (!best) {
+        // last-ditch: the layout that comes CLOSEST to fitting at S=1, so a word too
+        // big even for the whole grid wraps to its least-overflowing form (centred,
+        // edge cells clipped) rather than a single microscopic/overflowing line.
+        var bo = null;
+        for (var Lf = 1; Lf <= capL; Lf++) {
+          var lsf = wrapToLines(words, Lf), mf = measureLines(lsf);
+          var over = Math.max(mf.pw / Math.max(1, cols - 1), mf.ph / Math.max(1, rows - 1));
+          if (!bo || over < bo.over) bo = { lines: lsf, pw: mf.pw, ph: mf.ph, over: over };
+          if (lsf.length < Lf) break;
+        }
+        best = { lines: bo.lines, pw: bo.pw, ph: bo.ph, S: 1, D: depthForScale(1) };
+      }
+      best = { lay: best, D: best.D };
 
       var S2 = best.lay.S, D2 = best.D;
       var pw = best.lay.pw, ph = best.lay.ph;
@@ -2522,26 +2654,25 @@
       var oy = Math.floor((availRows - ph * S2) / 2);
       if (ox < 0) ox = 0; if (oy < 0) oy = 0;
 
-      // stamp each line of words
+      // stamp each line (a STRING; embedded spaces advance by a word-gap). Each
+      // line is centred horizontally within the block; lines stack vertically.
       var lineYpx = 0;
       for (var li2 = 0; li2 < best.lay.lines.length; li2++) {
         var line = best.lay.lines[li2];
-        // line is centred horizontally too
+        // line pixel width (same model as measureLines)
         var lwpx = 0;
         for (var ki = 0; ki < line.length; ki++) {
-          lwpx += line[ki].length * FW + (line[ki].length - 1) * GAP;
-          if (ki) lwpx += WGAP;
+          lwpx += (ki ? GAP : 0);
+          lwpx += (line.charAt(ki) === ' ') ? (WGAP - GAP) : FW;
         }
         var lineXpx = Math.floor((pw - lwpx) / 2);
         var penX = lineXpx;
-        for (var wi = 0; wi < line.length; wi++) {
-          var word = line[wi];
-          for (var ci = 0; ci < word.length; ci++) {
-            var ch = word.charAt(ci);
-            stampGlyph(ch, ox + penX * S2, oy + lineYpx * S2, S2);
-            penX += FW + GAP;
-          }
-          penX += WGAP - GAP; // word separator (we already advanced one GAP)
+        for (var ci = 0; ci < line.length; ci++) {
+          var ch = line.charAt(ci);
+          if (ch === ' ') { penX += (ci ? GAP : 0) + (WGAP - GAP); continue; }
+          if (ci) penX += GAP;
+          stampGlyph(ch, ox + penX * S2, oy + lineYpx * S2, S2);
+          penX += FW;
         }
         lineYpx += FH + LGAP;
       }
@@ -3238,6 +3369,7 @@
      links stay short + back-compatible. */
 
   var charsetFromHash = false; // did the URL explicitly pin a ramp?
+  var cellFromHash = false;    // did the URL explicitly pin a cell size (ce=)?
 
   function clampInt(v, lo, hi) {
     v = parseInt(v, 10);
@@ -3249,6 +3381,7 @@
   function readHash() {
     var h = (location.hash || '').replace(/^#/, '');
     charsetFromHash = false;
+    cellFromHash = false;
     var wordFromHash = false;   // did the URL pin a word? (implies words mode)
     if (!h) {
       // no hash: default the donut engine to its canonical 'donut' ramp
@@ -3266,7 +3399,7 @@
       else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
       else if (k === 'sp') { var sp = clampInt(val, 0, 200); if (sp !== null) state.speed = sp / 100; }
-      else if (k === 'ce') { var ce = clampInt(val, 5, 22); if (ce !== null) state.cell = ce; }
+      else if (k === 'ce') { var ce = clampInt(val, 5, 22); if (ce !== null) { state.cell = ce; cellFromHash = true; } }
       else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
       else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
       else if (k === 'w') { try { state.word = decodeURIComponent(val || ''); } catch (e) { state.word = val || ''; } wordFromHash = true; }
@@ -4071,6 +4204,8 @@
     if (state.mode === 'image' && state.engine === 'image' && !Image_.hasImage()) {
       state.engine = 'donut'; state.mode = 'generative';
     }
+    // words link -> finer grid (parity with UI words entry + boot), unless ce= pinned
+    if (state.mode === 'words' && !cellFromHash && state.cell > 7) state.cell = 6;
     if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
     reseed();
     Words.invalidate();
@@ -4098,6 +4233,10 @@
   // (A word-pinned link is words mode and shares fully via the hash.)
   var bootImageWanted = (state.mode === 'image' && state.engine === 'image');
   if (bootImageWanted && !Image_.hasImage()) { state.engine = 'donut'; state.mode = 'generative'; }
+  // WORDS boot via a #w= link gets the SAME finer grid the UI applies on words
+  // entry, so long words wrap into legible letters instead of thin bars on the
+  // coarse default cell. Respect an explicit ce= (the user pinned a cell size).
+  if (state.mode === 'words' && !cellFromHash && state.cell > 7) state.cell = 6;
   if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
   reseed();
   applyColour();
