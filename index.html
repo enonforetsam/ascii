@@ -432,35 +432,75 @@
     cursor:not-allowed;
   }
 
-  /* ---- MODE SWITCH — a top-level segmented toggle that swaps the control set.
-     body.mode-generative shows the generative-only controls (ENGINE, LOOKS, the
-     SPEED knob, the SHUFFLE action); body.mode-image shows the image-only controls
-     (the IMAGE source section + INVERT). The shared controls (CHARSET, COLOUR, the
-     CELL + CONTRAST knobs, COPY + SHARE, EXPORT) live in BOTH modes. Visibility is
-     pure display:none so there are no dead/blank gaps. ---- */
+  /* ---- MODE SWITCH — a top-level 3-way segmented toggle that swaps the control
+     set. body.mode-generative shows the generative-only controls (ENGINE, LOOKS,
+     the SPEED knob, the SHUFFLE action); body.mode-image shows the image-only
+     controls (the IMAGE source section + INVERT); body.mode-words shows the WORDS
+     controls (the text input + FILL picker, SPEED only when the fill is an engine).
+     The shared controls (CHARSET/Ramp, COLOUR, the CELL + CONTRAST knobs, COPY +
+     SHARE, EXPORT) live in ALL modes. Visibility is pure display:none so there are
+     no dead/blank gaps. Driven by state.mode in syncControls(). ---- */
 
-  /* generative-only — hidden in image mode */
+  /* generative-only — hidden in image + words modes */
   body.mode-image #grp-engine,
+  body.mode-words #grp-engine,
   body.mode-image #grp-looks,
+  body.mode-words #grp-looks,
   body.mode-image #knob-speed,
-  body.mode-image .act-shuffle{ display:none; }
+  body.mode-image .act-shuffle,
+  body.mode-words .act-shuffle{ display:none; }
 
-  /* image-only — hidden in generative mode */
+  /* image-only — hidden when not in image mode */
   body.mode-generative #grp-image,
+  body.mode-words #grp-image,
   body.mode-generative #img-invert{ display:none; }
   /* INVERT lives inside the image-loaded block; its row wrapper must also vanish
      in generative mode so no empty .tabs row remains. The whole #grp-image is
      already hidden above, so this is only belt-and-braces for the inner row. */
 
+  /* words-only — the text input + FILL picker, hidden in the other modes */
+  #grp-words{ display:none; }
+  body.mode-words #grp-words{ display:flex; }
+
   /* In image mode the SPEED knob is gone — the knob row now holds CELL + CONTRAST.
-     The grid is 3 equal columns; with one knob removed, recentre to 2 columns so
-     the remaining dials sit balanced (no empty third column / lopsided gap). */
-  body.mode-image .knobgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+     In words mode SPEED is only meaningful when the fill is an engine; body.words-
+     static (solid fill) hides it too. Recentre to 2 columns when one dial is gone
+     so the remaining dials sit balanced (no empty third column / lopsided gap). */
+  body.mode-image .knobgrid,
+  body.mode-words.words-static .knobgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.mode-words.words-static #knob-speed{ display:none; }
 
   /* The ACTIONS group is shared (copy + share stay), but SHUFFLE is generative-
-     only. The group's .tabs is a 3-col grid; with shuffle hidden in image mode the
-     two remaining tiles must fill the row cleanly (no blank third cell). */
-  body.mode-image #grp-actions .tabs{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+     only. The group's .tabs is a 3-col grid; with shuffle hidden in image/words
+     mode the two remaining tiles must fill the row cleanly (no blank third cell). */
+  body.mode-image #grp-actions .tabs,
+  body.mode-words #grp-actions .tabs{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+  /* ---- WORDS text input — a self-contained field styled to the metal panel:
+     a recessed dark slot (matching the metal tiles' face) with light ink, a
+     hairline border + inset shadow so it reads as a milled groove in the panel. */
+  .wordfield{
+    appearance:none;
+    -webkit-appearance:none;
+    font-family:var(--mono);
+    font-size:13px;
+    letter-spacing:.04em;
+    color:#f2f2f3;
+    width:100%;
+    min-height:38px;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid rgba(0,0,0,.6);
+    background-color:#0a0b10;
+    background-image:linear-gradient(180deg, #0c0d13 0%, #121319 100%);
+    box-shadow:
+      inset 0 2px 4px rgba(0,0,0,.6),
+      inset 0 1px 0 rgba(255,255,255,.04);
+    text-shadow:none;
+    caret-color:#fff;
+  }
+  .wordfield::placeholder{ color:rgba(242,242,243,.4); }
+  .wordfield:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
 
   /* ---- IMAGE SECTION — two states toggled by body.has-image ---------------
      Default (no image): show .image-empty (the "insert image" button), hide
@@ -602,17 +642,38 @@
   <span class="sub">everything is characters</span>
 
   <div class="controls" role="group" aria-label="Instrument controls">
-    <!-- MODE SWITCH — top-level segmented toggle that swaps the whole control set.
-         Generative = donut/matrix/plasma engines + looks + speed + shuffle.
-         Image = the image source + invert. Driven by body.mode-image /
-         body.mode-generative (set in syncControls) so each mode shows only its
-         own controls; the shared controls (charset/colour/cell/contrast/copy/
-         share/export) live in both. The active mode = state.engine==='image'. -->
+    <!-- MODE SWITCH — top-level 3-way segmented toggle that swaps the whole control
+         set. Generative = donut/matrix/plasma engines + looks + speed + shuffle.
+         Image = the image source + invert. Words = type text -> ASCII, optionally
+         filled by a live engine. Driven by body.mode-generative / body.mode-image /
+         body.mode-words (set in syncControls from state.mode) so each mode shows
+         only its own controls; the shared controls (charset/colour/cell/contrast/
+         copy/share/export) live in all three. -->
     <div class="group">
       <span class="lab" id="lab-mode">Mode</span>
-      <div class="tabs cols2 modeswitch" id="seg-mode" role="group" aria-labelledby="lab-mode">
+      <div class="tabs modeswitch" id="seg-mode" role="group" aria-labelledby="lab-mode">
         <button class="tab" id="mode-gen" data-mode="generative" type="button" aria-pressed="true" aria-label="Generative mode — donut, matrix, plasma engines">Generative</button>
         <button class="tab" id="mode-img" data-mode="image" type="button" aria-pressed="false" aria-label="Image mode — convert a loaded image to ASCII">Image</button>
+        <button class="tab" id="mode-words" data-mode="words" type="button" aria-pressed="false" aria-label="Words mode — type text rendered as ASCII">Words</button>
+      </div>
+    </div>
+
+    <!-- WORDS — type text that renders as ASCII, optionally with a live engine
+         flowing inside the letter shapes. Shown only in words mode (body.mode-words).
+         The FILL picker chooses what fills the glyphs: solid coverage, or an engine
+         (matrix/plasma/donut) cut to the letter mask. -->
+    <div class="group" id="grp-words">
+      <span class="lab" id="lab-word-text">Text</span>
+      <input type="text" class="wordfield" id="word-text" value="ASCII" maxlength="48"
+             autocomplete="off" autocapitalize="characters" spellcheck="false"
+             aria-labelledby="lab-word-text" aria-label="Words to render as ASCII"
+             placeholder="type your words…">
+      <span class="lab" id="lab-word-fill" style="margin-top:4px">Fill</span>
+      <div class="tabs cols2" id="seg-wordfill" role="group" aria-labelledby="lab-word-fill">
+        <button class="tab" data-fill="solid" type="button" aria-pressed="true" aria-label="solid fill — flat letters">solid</button>
+        <button class="tab" data-fill="matrix" type="button" aria-pressed="false" aria-label="matrix fill — falling glyphs inside the letters">matrix</button>
+        <button class="tab" data-fill="plasma" type="button" aria-pressed="false" aria-label="plasma fill — plasma field inside the letters">plasma</button>
+        <button class="tab" data-fill="donut" type="button" aria-pressed="false" aria-label="donut fill — spinning donut inside the letters">donut</button>
       </div>
     </div>
 
@@ -783,6 +844,7 @@
   /* ---------- live state ---------- */
 
   var state = {
+    mode:    'generative', // 'generative' | 'image' | 'words' — top-level creative mode
     engine:  'donut',
     charset: 'standard',
     colour:  'phosphor',
@@ -790,7 +852,9 @@
     cell:    12,     // logical px per cell
     contrast:1.0,    // 0.4..2.2 gamma-ish multiplier
     seed:    0,       // integer; feeds the seeded PRNG for reproducible variation
-    invert:  false    // image engine: invert the luminance->glyph mapping
+    invert:  false,   // image engine: invert the luminance->glyph mapping
+    word:    'ASCII', // words mode: the text to render as ASCII
+    wordFill:'solid'  // words mode: 'solid' | 'matrix' | 'plasma' | 'donut'
   };
 
   // DEFAULTS — the canonical baseline. writeHash() trims any key equal to its
@@ -863,7 +927,10 @@
     }
     var ramp = rampString();
     for (var i = 0; i < ramp.length; i++) add(ramp.charCodeAt(i));
-    if (state.engine === 'matrix') {
+    // matrix glyphs are forced code points — bake them when matrix is the active
+    // generative engine OR when the words-mode fill is 'matrix'.
+    if (state.engine === 'matrix' ||
+        (state.mode === 'words' && state.wordFill === 'matrix')) {
       for (var j = 0; j < MATRIX_GLYPHS.length; j++) add(MATRIX_GLYPHS.charCodeAt(j));
     }
 
@@ -919,6 +986,7 @@
     Matrix.reset();
     Donut.reset();
     Image_.invalidate();   // grid size changed -> re-sample the image
+    Words.invalidate();    // grid size changed -> re-fit the text mask
 
     atlasDirty = true;
   }
@@ -1298,6 +1366,157 @@
     };
   })();
 
+  /* ====================================================================
+     WORDS  (typed text -> ASCII, optionally filled by a live engine)
+     The user types text; we draw it to an offscreen canvas fit to the grid as
+     big bold sans, AUTO-FIT to the width (and aspect-corrected the SAME way the
+     image pipeline is, so the word reads correctly in the COPYABLE TEXT, not
+     stretched), and read it back into a per-cell MASK in 0..1 (anti-aliased
+     edges, so the ramp gradates the letter edges smoothly).
+
+     The mask is CACHED — recomputed only on text / grid (resize+cell) / font
+     change, NEVER per frame. render(dt):
+       fill 'solid'  : lum[i] = mask[i]               (static, ramp gradates edges)
+       fill engine   : engine renders into lum[] then lum[i] *= mask[i]  (the
+                       animated field is cut to the letter shapes; outside = blank)
+     ==================================================================== */
+  var Words = (function () {
+    var CHAR_ASPECT = 0.5;       // glyph width / height — same model as Image_
+    var mask = null;             // Float32Array(gridN): letter coverage 0..1
+    var dirty = true;
+    var keyText = '', keyCols = 0, keyRows = 0;  // cache invalidation key
+    var off = document.createElement('canvas');
+    var octx = off.getContext('2d', { willReadFrequently: true });
+
+    function invalidate() { dirty = true; }
+
+    // Rebuild the mask if the text or grid changed since the last build.
+    function ensure() {
+      var txt = (state.word == null ? '' : String(state.word));
+      if (!dirty && txt === keyText && cols === keyCols && rows === keyRows &&
+          mask && mask.length === gridN) return;
+      build(txt);
+    }
+
+    function build(txt) {
+      dirty = false;
+      keyText = txt; keyCols = cols; keyRows = rows;
+      if (!mask || mask.length !== gridN) mask = new Float32Array(gridN);
+      mask.fill(0);
+
+      var words = txt.split(/\s+/).filter(function (w) { return w.length; });
+      if (!words.length) return;   // nothing to draw -> blank mask
+
+      // Render to an offscreen canvas whose pixel grid maps 1px==1cell, but with
+      // X stretched by 1/CHAR_ASPECT so we draw in SQUARE pixels; we then sample
+      // back with X scaled by CHAR_ASPECT. This makes a circle a circle and the
+      // word read un-stretched in the monospace text grid (image-pipeline parity).
+      var OW = Math.max(1, Math.round(cols * CHAR_ASPECT));  // drawable width in square units
+      var OH = Math.max(1, rows);
+      // supersample for clean anti-aliased edges, then downscale by sampling.
+      var SS = 4;
+      var W = OW * SS, H = OH * SS;
+      // guard against huge canvases on very large grids
+      if (W > 4096) { SS = Math.max(1, (4096 / OW) | 0); W = OW * SS; H = OH * SS; }
+      off.width = W; off.height = H;
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, W, H);
+      octx.fillStyle = '#fff';
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      var fontStack = '900 PXpx system-ui, -apple-system, "Segoe UI", Roboto, ' +
+        'Helvetica, Arial, sans-serif';
+
+      // AUTO-FIT: choose the largest font (per line) so the longest word spans the
+      // width with a small margin, and all lines stack within the height. Wrapping
+      // is by whitespace; each whitespace-token is its own line so long phrases use
+      // the full height rather than overflowing the width.
+      var lines = words;
+      var marginX = W * 0.06, marginY = H * 0.10;
+      var availW = W - marginX * 2, availH = H - marginY * 2;
+      var lineGap = 1.06;
+      // binary-search a font size that fits both axes
+      function measureFits(px) {
+        octx.font = fontStack.replace('PXpx', px + 'px');
+        var lh = px * lineGap;
+        if (lh * lines.length > availH) return false;
+        for (var i = 0; i < lines.length; i++) {
+          if (octx.measureText(lines[i]).width > availW) return false;
+        }
+        return true;
+      }
+      var lo = 4, hi = H;   // px font size bounds
+      while (hi - lo > 1) {
+        var mid = (lo + hi) / 2;
+        if (measureFits(mid)) lo = mid; else hi = mid;
+      }
+      var px = lo;
+      octx.font = fontStack.replace('PXpx', px + 'px');
+      var lh = px * lineGap;
+      var totalH = lh * lines.length;
+      var startY = H / 2 - totalH / 2 + lh / 2;
+      for (var li = 0; li < lines.length; li++) {
+        octx.fillText(lines[li], W / 2, startY + li * lh);
+      }
+
+      // sample back into the cell mask: average the SS×SS block (with X mapped
+      // through CHAR_ASPECT) so each cell gets anti-aliased coverage 0..1.
+      var data;
+      try { data = octx.getImageData(0, 0, W, H).data; }
+      catch (e) { return; }
+      var blk = SS, inv = 1 / (blk * blk * 255);
+      for (var gy = 0; gy < rows && gy < OH; gy++) {
+        var by = gy * SS;
+        for (var gx = 0; gx < cols; gx++) {
+          // map cell column -> square-pixel column via CHAR_ASPECT
+          var sx = Math.round(gx * CHAR_ASPECT * SS);
+          if (sx >= W) continue;
+          var sum = 0, cnt = 0;
+          for (var yy = 0; yy < blk; yy++) {
+            var ry = by + yy; if (ry >= H) break;
+            var rowOff = ry * W;
+            for (var xx = 0; xx < blk; xx++) {
+              var rx = sx + xx; if (rx >= W) break;
+              sum += data[(rowOff + rx) * 4 + 3]; // alpha channel = coverage
+              cnt++;
+            }
+          }
+          if (cnt) mask[gy * cols + gx] = sum / (cnt * 255);
+        }
+      }
+    }
+
+    // Multiply the freshly-rendered lum[] by the letter mask (engine fills).
+    function applyMask() {
+      ensure();
+      if (!mask || mask.length !== gridN) return;
+      for (var i = 0; i < gridN; i++) lum[i] *= mask[i];
+    }
+
+    // Solid fill: lum = mask coverage (static; ramp gradates the edges).
+    function renderSolid() {
+      ensure();
+      glyph.fill(0);
+      if (mask && mask.length === gridN) lum.set(mask);
+      else lum.fill(0);
+    }
+
+    // Engine fill: run the chosen engine into lum[], then cut to the mask.
+    function renderFill(dt, fill, tiltX, tiltY) {
+      if (fill === 'matrix')      Matrix.render(dt);
+      else if (fill === 'donut')  Donut.render(dt, tiltX, tiltY);
+      else                        Plasma.render(dt);
+      applyMask();   // keeps glyph[] (matrix forces glyphs) but zeroes lum outside
+    }
+
+    function getMask() { ensure(); return mask; }
+
+    return {
+      invalidate: invalidate, renderSolid: renderSolid, renderFill: renderFill,
+      applyMask: applyMask, getMask: getMask
+    };
+  })();
+
   /* ---------- renderer: blit the atlas per non-blank cell ---------- */
 
   var ALPHA_STEPS = 6; // quantize brightness to N alpha tiers
@@ -1559,9 +1778,13 @@
       tiltY = Math.max(-1, Math.min(1, (pointer.y / vh) * 2 - 1));
     }
     var sp = state.speed;
-    if (state.engine === 'donut')      Donut.render(dt * sp, tiltX, tiltY);
+    if (state.mode === 'words') {
+      if (state.wordFill === 'solid') Words.renderSolid();
+      else Words.renderFill(dt * sp, state.wordFill, tiltX, tiltY);
+    }
+    else if (state.mode === 'image')   Image_.render(dt);
+    else if (state.engine === 'donut') Donut.render(dt * sp, tiltX, tiltY);
     else if (state.engine === 'matrix') Matrix.render(dt * sp);
-    else if (state.engine === 'image')  Image_.render(dt);
     else                                Plasma.render(dt * sp);
     paint();
   }
@@ -1580,14 +1803,26 @@
   // and plasma is advanced to a developed (non-faint) phase.
   function renderStaticFrame() {
     var tiltX = 0, tiltY = 0; // ignore pointer for a deterministic frame
-    if (state.engine === 'donut') {
+    if (state.mode === 'words') {
+      // reduced-motion words: solid is naturally static; an engine-fill renders
+      // ONE settled static frame (developed phase) then cuts to the letter mask.
+      if (state.wordFill === 'solid') {
+        Words.renderSolid();
+      } else if (state.wordFill === 'matrix') {
+        Matrix.reset(); Matrix.render(0.4); Words.applyMask();
+      } else if (state.wordFill === 'donut') {
+        Donut.setTime(1.2); Donut.render(0, 0, 0); Words.applyMask();
+      } else {
+        Plasma.setTime(3.0); Plasma.render(0); Words.applyMask();
+      }
+    } else if (state.mode === 'image') {
+      Image_.render(0);         // static sample (recomputes if dirty)
+    } else if (state.engine === 'donut') {
       Donut.setTime(1.2);       // fixed absolute time -> stable A,B
       Donut.render(0, tiltX, tiltY);
     } else if (state.engine === 'matrix') {
       Matrix.reset();           // re-prime the full-height field
       Matrix.render(0.4);       // larger settle step advances heads into view
-    } else if (state.engine === 'image') {
-      Image_.render(0);         // static sample (recomputes if dirty)
     } else {
       Plasma.setTime(3.0);      // fixed developed phase (deterministic)
       Plasma.render(0);
@@ -1633,8 +1868,10 @@
   function readHash() {
     var h = (location.hash || '').replace(/^#/, '');
     charsetFromHash = false;
+    var wordFromHash = false;   // did the URL pin a word? (implies words mode)
     if (!h) {
       // no hash: default the donut engine to its canonical 'donut' ramp
+      state.mode = (state.engine === 'image') ? 'image' : 'generative';
       if (state.engine === 'donut') state.charset = 'donut';
       return;
     }
@@ -1650,7 +1887,13 @@
       else if (k === 'ce') { var ce = clampInt(val, 5, 22); if (ce !== null) state.cell = ce; }
       else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
       else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
+      else if (k === 'w') { try { state.word = decodeURIComponent(val || ''); } catch (e) { state.word = val || ''; } wordFromHash = true; }
+      else if (k === 'wf') { if (val === 'solid' || val === 'matrix' || val === 'plasma' || val === 'donut') state.wordFill = val; }
     }
+    // top-level MODE: an explicit word pins WORDS mode; else image render => image;
+    // else generative. (back-compat: old #e=image links still resolve to image.)
+    if (wordFromHash) state.mode = 'words';
+    else state.mode = (state.engine === 'image') ? 'image' : 'generative';
     // donut with no explicit ramp -> canonical donut ramp
     if (state.engine === 'donut' && !charsetFromHash) state.charset = 'donut';
   }
@@ -1679,6 +1922,12 @@
     }
     // invert is image-only; append iv=1 only when set (default false -> omitted)
     if (state.invert) out.push('iv=1');
+    // words-mode keys: w=<word> implies words mode on read; wf=<fill> only when
+    // non-default. (Appended after the legacy keys so old links stay back-compat.)
+    if (state.mode === 'words') {
+      out.push('w=' + encodeURIComponent(state.word == null ? '' : state.word));
+      if (state.wordFill !== 'solid') out.push('wf=' + state.wordFill);
+    }
     return out.length ? '#' + out.join('&') : '#';
   }
   function writeHash() {
@@ -1696,6 +1945,9 @@
   var segMode    = document.getElementById('seg-mode');
   var modeGen    = document.getElementById('mode-gen');
   var modeImg    = document.getElementById('mode-img');
+  var modeWords  = document.getElementById('mode-words');
+  var segWordFill= document.getElementById('seg-wordfill');
+  var wordText   = document.getElementById('word-text');
   var labCharset = document.getElementById('lab-charset');
   var knmCell    = document.getElementById('knm-cell');
   var segEngine  = document.querySelector('.tabs[aria-labelledby="lab-engine"]');
@@ -1853,7 +2105,9 @@
     var p = LOOKS[name];
     if (!p) return;
     // A LOOK switches to its generative engine but KEEPS any loaded image — you
-    // can click the thumbnail to return to it. No surprise clearing.
+    // can click the thumbnail to return to it. No surprise clearing. Looks are a
+    // generative concept, so they also return the top-level mode to generative.
+    state.mode     = 'generative';
     lastGenEngine = p.e;
     state.engine   = p.e;
     if (p.c) state.charset = p.c;
@@ -1884,6 +2138,7 @@
   // which LOOK (if any) exactly matches the current config? (contrast is not part
   // of a look's identity, so it's ignored). Highlights that look, else clears all.
   function matchLook() {
+    if (state.mode !== 'generative') return null;  // looks are generative-only
     for (var name in LOOKS) {
       var p = LOOKS[name];
       var c = p.c || (p.e === 'donut' ? 'donut' : 'standard');
@@ -1922,23 +2177,30 @@
   }
 
   function syncControls() {
-    // TOP-LEVEL MODE: image render => image mode, else generative. Drive the body
-    // class (CSS swaps the control set) + the mode toggle's pressed state.
-    var imageMode = (state.engine === 'image');
-    document.body.classList.toggle('mode-image', imageMode);
-    document.body.classList.toggle('mode-generative', !imageMode);
-    if (modeGen) modeGen.setAttribute('aria-pressed', imageMode ? 'false' : 'true');
-    if (modeImg) modeImg.setAttribute('aria-pressed', imageMode ? 'true' : 'false');
-    // optional clarity touch: in image mode the shared CHARSET/CELL read as
-    // Ramp/Detail (they're acting on the image), else their generative names.
-    if (labCharset) labCharset.textContent = imageMode ? 'Ramp' : 'Charset';
-    if (knmCell) knmCell.textContent = imageMode ? 'Detail' : 'Cell';
+    // TOP-LEVEL MODE (state.mode): drive the body class (CSS swaps the control
+    // set) + the 3-way mode toggle's pressed state.
+    var m = state.mode;
+    document.body.classList.toggle('mode-generative', m === 'generative');
+    document.body.classList.toggle('mode-image', m === 'image');
+    document.body.classList.toggle('mode-words', m === 'words');
+    // words-static: solid fill has no animation -> hide the SPEED knob.
+    document.body.classList.toggle('words-static', m === 'words' && state.wordFill === 'solid');
+    if (modeGen)   modeGen.setAttribute('aria-pressed', m === 'generative' ? 'true' : 'false');
+    if (modeImg)   modeImg.setAttribute('aria-pressed', m === 'image' ? 'true' : 'false');
+    if (modeWords) modeWords.setAttribute('aria-pressed', m === 'words' ? 'true' : 'false');
+    // clarity touch: image + words act on a target, so the shared CHARSET/CELL
+    // read as Ramp/Detail there, else their generative names.
+    var ramps = (m === 'image' || m === 'words');
+    if (labCharset) labCharset.textContent = ramps ? 'Ramp' : 'Charset';
+    if (knmCell) knmCell.textContent = ramps ? 'Detail' : 'Cell';
 
     // the ENGINE tabs are generative-only; mark the active engine, or none when
     // the image render is active (so no generative tab reads as pressed).
     setPressed(segEngine, 'data-engine', state.engine === 'image' ? null : state.engine);
     setPressed(segCharset, 'data-ramp', state.charset);
     setPressed(segColour, 'data-colour', state.colour);
+    if (segWordFill) setPressed(segWordFill, 'data-fill', state.wordFill);
+    if (wordText && wordText.value !== state.word) wordText.value = state.word;
     if (btnInvert) btnInvert.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
     syncImageSection();
     syncSliderLabels();
@@ -1960,6 +2222,9 @@
       toast('insert an image');
       return;
     }
+    // keep state.mode coherent: a generative engine => generative mode; image => image.
+    if (GEN_ENGINES[e]) state.mode = 'generative';
+    else if (e === 'image') state.mode = 'image';
     if (state.engine === e) { syncImageSection(); return; }
     state.engine = e;
     atlasDirty = true; // matrix needs its glyph set baked
@@ -1977,34 +2242,76 @@
      picker (only the explicit "insert" button does), so the canvas may sit empty
      until an image is inserted. */
   function enterGenerativeMode() {
+    state.mode = 'generative';
     var back = GEN_ENGINES[lastGenEngine] ? lastGenEngine : 'donut';
     setEngine(back);
+    syncControls();   // ensure the mode classes reflect generative even if engine was unchanged
+    start();
   }
   function enterImageMode() {
+    state.mode = 'image';
     if (Image_.hasImage()) {
       setEngine('image');               // renders the loaded image
+      syncControls();
+      start();
       return;
     }
     // no image yet: switch to image mode WITHOUT opening the picker. Set the
     // engine directly (setEngine('image') would pop the picker) and show the
     // insert state + a hint.
-    if (state.engine !== 'image') {
-      state.engine = 'image';
-      atlasDirty = true;
-      Image_.invalidate();
-      syncControls();                   // flips body.mode-image, shows insert state
-      writeHash();
-    } else {
-      syncControls();
-    }
-    if (reduce) start();                // re-render (canvas may be empty)
+    state.engine = 'image';
+    atlasDirty = true;
+    Image_.invalidate();
+    syncControls();                   // flips body.mode-image, shows insert state
+    writeHash();
+    start();                          // re-render (canvas may be empty)
     toast('insert an image to convert');
+  }
+  // WORDS mode: top-level switch to words. The render dispatch keys off state.mode,
+  // so we just set it, sync the control set, and (re)start. A generative engine is
+  // still tracked underneath for the engine-fill paths.
+  function enterWordsMode() {
+    state.mode = 'words';
+    Words.invalidate();
+    atlasDirty = true;     // matrix-fill may need its glyph set baked
+    syncControls();
+    writeHash();
+    start();
   }
   if (segMode) segMode.addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn || !btn.dataset.mode) return;
-    if (btn.dataset.mode === 'image') enterImageMode();
+    var m = btn.dataset.mode;
+    if (m === 'image') enterImageMode();
+    else if (m === 'words') enterWordsMode();
     else enterGenerativeMode();
+  });
+
+  // WORDS text input — live-updates the mask (debounced rebuild via cache key).
+  if (wordText) {
+    var wordSync = function () {
+      state.word = wordText.value;
+      state.mode = 'words';
+      Words.invalidate();
+      syncControls();
+      writeHash();
+      start();   // re-render (reduced-motion has no rAF loop)
+    };
+    wordText.addEventListener('input', wordSync);
+  }
+
+  // WORDS fill picker — solid vs an engine that flows inside the letters.
+  if (segWordFill) segWordFill.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.fill) return;
+    state.wordFill = btn.dataset.fill;
+    state.mode = 'words';
+    atlasDirty = true;     // matrix-fill needs its glyph set baked
+    if (state.wordFill === 'donut') Donut.reset();
+    if (state.wordFill === 'matrix') Matrix.reset();
+    syncControls();
+    writeHash();
+    start();
   });
 
   // delegated click per chip group (one listener each). The ENGINE tabs only
@@ -2258,15 +2565,18 @@
 
   window.addEventListener('hashchange', function () {
     readHash();
-    // e=image with no loaded bytes -> fall back to a generative engine.
-    if (state.engine === 'image' && !Image_.hasImage()) state.engine = 'donut';
+    // e=image with no loaded bytes -> fall back to a generative engine (unless a
+    // word pinned words mode, where the engine is just the fill source).
+    if (state.mode === 'image' && state.engine === 'image' && !Image_.hasImage()) {
+      state.engine = 'donut'; state.mode = 'generative';
+    }
     if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
     reseed();
+    Words.invalidate();
     applyColour();
     syncControls();
     resize();
-    if (reduce) start();
-    else start();
+    start();
   });
 
   var resizeTimer = 0;
@@ -2284,8 +2594,9 @@
   // a shared #e=image link references the image render but carries no image
   // bytes (not shareable via hash). Fall back to a generative engine (donut) so
   // we never boot to a blank stage; remember it as the last generative engine.
-  var bootImageWanted = (state.engine === 'image');
-  if (state.engine === 'image' && !Image_.hasImage()) state.engine = 'donut';
+  // (A word-pinned link is words mode and shares fully via the hash.)
+  var bootImageWanted = (state.mode === 'image' && state.engine === 'image');
+  if (bootImageWanted && !Image_.hasImage()) { state.engine = 'donut'; state.mode = 'generative'; }
   if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
   reseed();
   applyColour();
@@ -2297,6 +2608,17 @@
   // prompt for an image if the link asked for the image render but had no bytes.
   if (bootImageWanted && !Image_.hasImage()) {
     toast('insert an image to convert');
+  }
+
+  // OPTIONAL test hook — exposed ONLY when window.__ASCII_TEST__ is set before
+  // load (headless functional tests). Zero effect on the shipped instrument.
+  if (window.__ASCII_TEST__) {
+    window.__ascii = {
+      state: state,
+      gridToText: gridToText,
+      getMask: function () { return Words.getMask(); },
+      grid: function () { return { cols: cols, rows: rows, lum: lum, glyph: glyph }; }
+    };
   }
 })();
 </script>
