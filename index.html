@@ -103,41 +103,51 @@
     padding:18px 16px 14px;
     overflow-y:auto;
     overscroll-behavior:contain;
-    /* dark brushed-metal instrument faceplate — a fixed neutral panel, decoupled
-       from the art theme: override the colour tokens locally so every control in
-       the rail resolves white-on-dark-metal, while the stage/art keeps the active
-       theme. (Sibling to Fluid's --panel-metal, ported to ASCII's dark palette.) */
-    --ink:#f5f5f6;
-    --ink-rgb:245,245,246;
-    --ink-dim:#9a9a9e;
+    /* LIGHT brushed-metal instrument faceplate — visually identical to Fluid's
+       control panel (Fluid .panel, ~line 46). A fixed neutral light-metal panel,
+       decoupled from the art theme: override the colour tokens locally to Fluid's
+       LIGHT palette so every control resolves DARK-ink-on-light-metal, while the
+       stage/art keeps the active theme. Ports Fluid's --panel-metal #d8d8d5, its
+       --ink #101010, --line and --accent #f5bdc9 verbatim. */
+    --ink:#101010;
+    --ink-rgb:16,16,16;
+    --ink-dim:rgba(16,16,16,.58);
     --glow:none;
     --ctl-glow:none;
-    --tab-bg-on:#f5f5f6;
+    --line:rgba(16,16,16,.16);
+    --accent:#f5bdc9;
+    --panel-metal:#d8d8d5;
     color:var(--ink);
     text-shadow:none;
-    /* hairline border-right + a faint top inset highlight on a vertical metal
-       gradient, with a very-subtle vertical brushed texture layered on top. */
-    border-right:1px solid rgba(255,255,255,.10);
-    background-color:#101116;
+    /* Fluid's exact faceplate: layered radial sheens + a brushed vertical texture +
+       a vertical metal gradient, with the inset bevel highlight/shadow. Keep a
+       hairline border-right so it reads as a faceplate beside the dark art stage
+       (Fluid uses inset -1px; here a real border divides panel from stage). */
+    background-color:var(--panel-metal);
     background-image:
-      linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,0) 22%),
-      repeating-linear-gradient(90deg,
-        rgba(255,255,255,.022) 0, rgba(255,255,255,.022) 1px,
-        rgba(0,0,0,.05) 2px, rgba(0,0,0,.05) 3px),
-      linear-gradient(180deg, #16171c 0%, #121319 52%, #0f1014 100%);
+      radial-gradient(120% 80% at 100% 0%, rgba(255,255,255,.56), rgba(255,255,255,0) 42%),
+      radial-gradient(100% 80% at 0% 100%, rgba(84,68,102,.08), rgba(84,68,102,0) 48%),
+      linear-gradient(90deg, rgba(255,255,255,.38), rgba(255,255,255,0) 28%, rgba(0,0,0,.10) 100%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.28) 0, rgba(255,255,255,.28) 1px, rgba(70,76,86,.07) 2px, rgba(70,76,86,.07) 4px),
+      linear-gradient(180deg, #e7e8e8 0%, #c8ccd1 54%, #aeb4bc 100%);
+    border-right:1px solid rgba(0,0,0,.22);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.07),
-      inset -1px 0 0 rgba(0,0,0,.5);
+      inset -18px 0 34px rgba(0,0,0,.10),
+      inset 1px 0 0 rgba(255,255,255,.75);
   }
   .topbar::-webkit-scrollbar{width:7px;height:7px}
-  .topbar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:7px}
+  .topbar::-webkit-scrollbar-thumb{background:rgba(16,16,16,.22);border-radius:7px}
   .topbar::-webkit-scrollbar-track{background:transparent}
+  /* Fluid wordmark treatment: uppercase, .22em tracking, LIGHT emboss
+     (text-shadow 0 1px 0 rgba(255,255,255,.62)) so dark ink lifts off the metal. */
   h1.wordmark{
-    font-size:18px;
+    font-size:16px;
     font-weight:700;
-    letter-spacing:.16em;
+    letter-spacing:.22em;
+    text-transform:uppercase;
     line-height:1;
-    text-shadow:var(--glow);
+    color:var(--ink);
+    text-shadow:0 1px 0 rgba(255,255,255,.62);
     white-space:nowrap;
     flex:0 0 auto;
   }
@@ -147,15 +157,16 @@
     margin-left:.18em;
     vertical-align:-.08em;
     background:var(--ink);
-    box-shadow:var(--glow);
+    box-shadow:none;
     animation:blink 1.05s steps(1,end) infinite;
   }
   @keyframes blink{50%{opacity:0}}
   .sub{
-    font-size:10px;
+    font-size:9px;
     letter-spacing:.34em;
     text-transform:uppercase;
-    opacity:.62;
+    color:var(--ink-dim);
+    opacity:1;
     white-space:nowrap;
     flex:0 0 auto;
   }
@@ -176,18 +187,24 @@
     align-items:stretch;
     gap:6px;
   }
+  /* Fluid section-label typography: 9px, .16em tracking, uppercase, soft ink */
   .group > .lab{
     font-size:9px;
-    letter-spacing:.22em;
+    letter-spacing:.16em;
     text-transform:uppercase;
-    opacity:.55;
+    font-weight:700;
+    color:var(--ink-dim);
+    opacity:1;
     user-select:none;
   }
 
-  /* ---- EMBOSSED METAL TILES — raised, tactile button tiles laid out in a grid.
-     Ported from Fluid's .fieldBtn: a face gradient (lighter top), a 1px hairline
-     border, an inset top-highlight + a drop shadow; :hover lifts, :active presses,
-     aria-pressed="true" lights/presses in. Monochrome white-on-dark-metal. ---- */
+  /* ---- EMBOSSED METAL TILES — raised, tactile button tiles, IDENTICAL to
+     Fluid's .fieldBtn (~line 548) but for text labels on the LIGHT panel: a light
+     tile face, a 1px --line hairline border, the inset top-highlight + drop shadow
+     (inset 0 1px 0 rgba(255,255,255,.10), 0 2px 4px rgba(0,0,0,.42)); :hover lifts
+     (translateY(-1px) + 0 4px 8px), :active presses (translateY(1px)); the active
+     aria-pressed="true" maps to Fluid's .fieldBtn.on — the ACCENT-lit pressed
+     state (inset accent ring on an accent-tinted face). ---- */
   .tabs{
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
@@ -207,39 +224,40 @@
     padding:0 8px;
     cursor:pointer;
     text-shadow:none;
-    border-radius:6px;
-    border:1px solid rgba(255,255,255,.10);
-    background-image:linear-gradient(180deg, #2a2c34 0%, #1b1c22 52%, #151620 100%);
+    border-radius:8px;
+    border:1px solid var(--line);
+    background-image:linear-gradient(180deg, #fbfbfa 0%, #e8e9e6 54%, #d6d8d3 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.10),
-      0 1px 2px rgba(0,0,0,.55);
-    transition:transform .08s ease, box-shadow .12s ease, background-image .12s ease, color .12s ease;
+      inset 0 1px 0 rgba(255,255,255,.85),
+      0 2px 4px rgba(0,0,0,.20);
+    transition:transform .07s ease, box-shadow .1s ease, background-image .1s ease, color .1s ease, border-color .1s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
-    background-image:linear-gradient(180deg, #32343d 0%, #202128 52%, #181923 100%);
+    background-image:linear-gradient(180deg, #ffffff 0%, #eeefec 54%, #dddfd9 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.14),
-      0 4px 9px rgba(0,0,0,.55);
+      inset 0 1px 0 rgba(255,255,255,.9),
+      0 4px 8px rgba(0,0,0,.22);
   }
   .tab:active, .btn:active{
     transform:translateY(1px);
     box-shadow:
-      inset 0 1px 3px rgba(0,0,0,.6),
-      0 1px 1px rgba(0,0,0,.4);
+      inset 0 1px 3px rgba(0,0,0,.22),
+      0 1px 1px rgba(0,0,0,.12);
   }
-  /* LIT / pressed-in state: brighter face + white-on-dark text + inset shadow */
+  /* LIT / pressed-in state — Fluid's .fieldBtn.on: accent ring + accent-tinted
+     face, dark ink stays legible on the soft accent. */
   .tab[aria-pressed="true"]{
-    color:#0b0b0c;
-    background-image:linear-gradient(180deg, #ffffff 0%, #e7e7ea 60%, #d2d2d6 100%);
-    border-color:rgba(255,255,255,.55);
+    color:#101010;
+    background-image:linear-gradient(180deg, #fbe2e8 0%, #f7cdd7 60%, #f0bcc8 100%);
+    border-color:var(--accent);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.7),
-      inset 0 -2px 5px rgba(0,0,0,.18),
-      0 1px 2px rgba(0,0,0,.5);
+      inset 0 0 0 2px var(--accent),
+      inset 0 1px 0 rgba(255,255,255,.6),
+      0 2px 5px rgba(0,0,0,.22);
   }
   .tab[aria-pressed="true"]:hover{
-    background-image:linear-gradient(180deg, #ffffff 0%, #ededf0 60%, #d8d8dc 100%);
+    background-image:linear-gradient(180deg, #fde7ec 0%, #f8d3dc 60%, #f2c2ce 100%);
   }
 
   /* uniform, always-visible focus ring */
@@ -387,12 +405,12 @@
     opacity:var(--scan-op);
   }
 
-  /* record button — active recording state pulses a red dot */
+  /* record button — active recording state pulses a red dot (on the light tile) */
   .tab.recording{
-    border-color:#ff4d4d;
-    color:#ff8a8a;
-    background-image:linear-gradient(180deg, #2a2c34 0%, #1b1c22 52%, #151620 100%);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 8px rgba(255,77,77,.5);
+    border-color:#c2160a;
+    color:#a01207;
+    background-image:linear-gradient(180deg, #ffecec 0%, #ffdada 60%, #ffcccc 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.7), 0 0 8px rgba(194,22,10,.35);
   }
   .tab.recording::before{
     content:"";
@@ -400,8 +418,8 @@
     width:7px;height:7px;
     margin-right:6px;
     border-radius:50%;
-    background:#ff4d4d;
-    box-shadow:0 0 6px #ff4d4d;
+    background:#c2160a;
+    box-shadow:0 0 6px rgba(194,22,10,.7);
     vertical-align:.04em;
     animation:recpulse .9s ease-in-out infinite;
   }
@@ -1164,7 +1182,7 @@
   /* ---------- WEBM recording ---------- */
   var REC_SUPPORTED = !!(typeof MediaRecorder !== 'undefined' &&
                          canvas.captureStream && window.Blob && window.URL);
-  var mediaRec = null, recChunks = null, recTimer = 0, recording = false;
+  var mediaRec = null, recChunks = null, recTimer = 0, recCountTimer = 0, recording = false;
 
   function startRec() {
     if (!REC_SUPPORTED) { toast('recording unavailable'); return; }
@@ -1185,7 +1203,12 @@
       recording = true;
       setRecUI(true);
       toast('recording…');
-      // safety auto-stop ~15s
+      // safety auto-stop ~15s, with a live countdown on the button
+      var remain = 15;
+      recCountTimer = window.setInterval(function () {
+        remain -= 1;
+        if (remain > 0 && btnRec) btnRec.textContent = '■ ' + remain;
+      }, 1000);
       recTimer = window.setTimeout(stopRec, 15000);
     } catch (e) {
       toast('recording failed');
@@ -1195,6 +1218,7 @@
   }
   function stopRec() {
     window.clearTimeout(recTimer);
+    window.clearInterval(recCountTimer);
     if (mediaRec && recording) {
       try { mediaRec.stop(); } catch (e) {}
     }
@@ -1458,8 +1482,9 @@
   function setRecUI(on) {
     if (!btnRec) return;
     btnRec.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btnRec.textContent = on ? '■ stop' : 'rec';
+    btnRec.textContent = on ? '■ 15' : 'rec';
     btnRec.classList.toggle('recording', !!on);
+    if (!on) { window.clearInterval(recCountTimer); recCountTimer = 0; }
   }
 
   /* ---------- LOOKS: one-tap curated configs ---------- */
@@ -1500,6 +1525,22 @@
     }
   }
 
+  // which LOOK (if any) exactly matches the current config? (contrast is not part
+  // of a look's identity, so it's ignored). Highlights that look, else clears all.
+  function matchLook() {
+    for (var name in LOOKS) {
+      var p = LOOKS[name];
+      var c = p.c || (p.e === 'donut' ? 'donut' : 'standard');
+      if (state.engine === p.e && state.charset === c && state.colour === p.k &&
+          Math.round(state.speed * 100) === p.sp && state.cell === p.ce &&
+          (state.seed | 0) === (p.sd | 0)) {
+        return name;
+      }
+    }
+    return null;
+  }
+  function syncLook() { if (segLooks) setPressed(segLooks, 'data-look', matchLook()); }
+
   function syncSliderLabels() {
     var sp = Math.round(state.speed * 100), co = Math.round(state.contrast * 100);
     slSpeed.value    = sp;
@@ -1519,6 +1560,7 @@
     setPressed(segCharset, 'data-ramp', state.charset);
     setPressed(segColour, 'data-colour', state.colour);
     syncSliderLabels();
+    syncLook();
   }
 
   function setEngine(e) {
@@ -1543,6 +1585,7 @@
     setPressed(segCharset, 'data-ramp', state.charset);
     atlasDirty = true;
     writeHash();
+    syncLook();
     if (reduce) start();
   });
   segColour.addEventListener('click', function (e) {
@@ -1552,6 +1595,7 @@
     setPressed(segColour, 'data-colour', state.colour);
     applyColour();
     writeHash();
+    syncLook();
     if (reduce) start();
   });
 
@@ -1569,6 +1613,7 @@
     slSpeed.setAttribute('aria-valuetext', slSpeed.value + ' percent');
     valSpeed.textContent = slSpeed.value;
     writeHash();
+    syncLook();
     if (reduce) start();
   });
 
@@ -1578,6 +1623,7 @@
     valCell.textContent = state.cell;
     resize();
     writeHash();
+    syncLook();
     if (reduce) start();
   });
 
