@@ -265,8 +265,100 @@
     background-image:linear-gradient(180deg, #ffffff 0%, #f6f6f7 60%, #eaeaec 100%);
   }
 
+  /* ---- LOOK SWATCHES — each LOOK is a SQUARE mini-swatch made of characters:
+     buildLookSwatches() fills a tile with a patch of that look's own charset
+     ramp, tinted to its palette (solid ink, or a clipped gradient for the
+     spectrum/fire/ice/neon looks), over that look's stage background, with the
+     name on a bottom scrim. Square via aspect-ratio; the glyph patch is sized in
+     container units (cqi) so it fills the tile at any rail width. Selected tile
+     gets a bright ring. This is the swatch counterpart to the .tab metal tiles. */
+  .looksgrid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:6px;
+  }
+  .looktile{
+    appearance:none;
+    -webkit-appearance:none;
+    position:relative;
+    aspect-ratio:1 / 1;
+    container-type:inline-size;
+    overflow:hidden;
+    padding:0;
+    cursor:pointer;
+    border-radius:8px;
+    border:1px solid rgba(0,0,0,.5);
+    background:#06060a;            /* per-look stage bg set inline by JS */
+    color:#ececef;                /* no-JS fallback: plain name text */
+    font-family:var(--mono);
+    font-size:10px;
+    line-height:34px;             /* centres the no-JS fallback name vertically */
+    text-align:center;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.10),
+      0 2px 4px rgba(0,0,0,.42);
+    transition:transform .07s ease, box-shadow .1s ease, border-color .1s ease, outline-color .1s ease;
+  }
+  .looktile:hover{
+    transform:translateY(-1px);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.18),
+      0 5px 10px rgba(0,0,0,.5);
+  }
+  .looktile:active{ transform:translateY(1px); }
+  /* the character patch — fills the tile, vertically centred, cropped to a full
+     bleed; cqi sizing keeps the glyph scale proportional to the tile. */
+  .looktex{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    white-space:pre;
+    line-height:1;
+    font-size:19cqi;
+    letter-spacing:0;
+    text-align:center;
+    pointer-events:none;
+    user-select:none;
+  }
+  /* the look name on a bottom scrim so it reads over any swatch */
+  .lookname{
+    position:absolute;
+    left:0;right:0;bottom:0;
+    font-size:8.5px;
+    letter-spacing:.04em;
+    text-transform:lowercase;
+    text-align:center;
+    padding:7px 3px 3px;
+    color:#f4f4f6;
+    background:linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.6) 56%, rgba(0,0,0,.82) 100%);
+    text-shadow:0 1px 2px rgba(0,0,0,.85);
+    pointer-events:none;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  /* light (paper) looks: dark name on a light scrim instead */
+  .looktile.lk-light .lookname{
+    color:#16160f;
+    background:linear-gradient(180deg, rgba(232,232,226,0) 0%, rgba(232,232,226,.66) 54%, rgba(232,232,226,.9) 100%);
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
+  }
+  /* selected — a bright ring that pops on both the dark swatch and the light panel */
+  .looktile[aria-pressed="true"]{
+    outline:2px solid var(--accent);
+    outline-offset:1px;
+    border-color:rgba(0,0,0,.3);
+    box-shadow:
+      inset 0 0 0 2px rgba(255,255,255,.92),
+      0 0 12px rgba(245,189,201,.5),
+      0 2px 6px rgba(0,0,0,.42);
+    transform:translateY(-1px);
+  }
+
   /* uniform, always-visible focus ring */
-  .tab:focus-visible, .btn:focus-visible, .knob:focus-visible, input:focus-visible{
+  .tab:focus-visible, .btn:focus-visible, .looktile:focus-visible, .knob:focus-visible, input:focus-visible{
     outline:2px solid var(--ink);
     outline-offset:2px;
   }
@@ -684,6 +776,8 @@
     .tab, .btn{transition:box-shadow .12s ease, background-image .12s ease, color .12s ease}
     .tab:hover, .btn:hover{transform:none}
     .tab:active, .btn:active{transform:none}
+    .looktile{transition:box-shadow .12s ease, border-color .12s ease, outline-color .12s ease}
+    .looktile:hover, .looktile:active, .looktile[aria-pressed="true"]{transform:none}
     .knob-dial{transition:none}
   }
 
@@ -704,6 +798,8 @@
        width and never clip — fixed grid columns are rigid, flex-wrap is not. */
     .tabs, .tabs.cols2{ display:flex; flex-wrap:wrap; gap:6px; }
     .tabs .tab, .tabs .btn{ flex:1 1 96px; }
+    /* look swatches: auto-fill square tiles so they pack the wide top strip */
+    .looksgrid{ grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); }
     .knobgrid{ display:flex; flex-wrap:wrap; gap:14px 20px; justify-content:flex-start; }
     .knobctl{ flex:0 0 auto; }
   }
@@ -868,18 +964,22 @@
 
     <div class="group" id="grp-looks">
       <span class="lab" id="lab-looks">Looks</span>
-      <div class="tabs seg looks cols2" id="seg-looks" role="group" aria-labelledby="lab-looks">
-        <button class="tab" data-look="Neo" type="button" aria-label="Neo look">Neo</button>
-        <button class="tab" data-look="Solaris" type="button" aria-label="Solaris look">Solaris</button>
-        <button class="tab" data-look="Blueprint" type="button" aria-label="Blueprint look">Blueprint</button>
-        <button class="tab" data-look="Mono" type="button" aria-label="Mono look">Mono</button>
-        <button class="tab" data-look="Signal" type="button" aria-label="Signal look">Signal</button>
-        <button class="tab" data-look="Ember" type="button" aria-label="Ember look">Ember</button>
-        <button class="tab" data-look="Inferno" type="button" aria-label="Inferno look">Inferno</button>
-        <button class="tab" data-look="Drift" type="button" aria-label="Drift look">Drift</button>
-        <button class="tab" data-look="Aurora" type="button" aria-label="Aurora look">Aurora</button>
-        <button class="tab" data-look="Voltage" type="button" aria-label="Voltage look">Voltage</button>
-        <button class="tab" data-look="Noir" type="button" aria-label="Noir look">Noir</button>
+      <!-- LOOK SWATCHES — each LOOK is a square mini-swatch built of characters
+           (its own charset ramp, tinted to its palette) by buildLookSwatches();
+           the plain name text below is the no-JS fallback. data-look + buttons are
+           preserved so the delegated click handler + setPressed selection still work. -->
+      <div class="looksgrid seg looks" id="seg-looks" role="group" aria-labelledby="lab-looks">
+        <button class="looktile" data-look="Neo" type="button" aria-label="Neo look">Neo</button>
+        <button class="looktile" data-look="Solaris" type="button" aria-label="Solaris look">Solaris</button>
+        <button class="looktile" data-look="Blueprint" type="button" aria-label="Blueprint look">Blueprint</button>
+        <button class="looktile" data-look="Mono" type="button" aria-label="Mono look">Mono</button>
+        <button class="looktile" data-look="Signal" type="button" aria-label="Signal look">Signal</button>
+        <button class="looktile" data-look="Ember" type="button" aria-label="Ember look">Ember</button>
+        <button class="looktile" data-look="Inferno" type="button" aria-label="Inferno look">Inferno</button>
+        <button class="looktile" data-look="Drift" type="button" aria-label="Drift look">Drift</button>
+        <button class="looktile" data-look="Aurora" type="button" aria-label="Aurora look">Aurora</button>
+        <button class="looktile" data-look="Voltage" type="button" aria-label="Voltage look">Voltage</button>
+        <button class="looktile" data-look="Noir" type="button" aria-label="Noir look">Noir</button>
       </div>
     </div>
 
@@ -2833,7 +2933,26 @@
     return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
            p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
-  function fname(ext) { return 'ascii-' + state.engine + '-' + stamp() + '.' + ext; }
+  // descriptive, unique, filesystem-safe download name based on what's on screen
+  // e.g. ascii-tunnel-neon-20260626-143205.txt / ascii-words-mybitduit-3d-ryb-….png
+  function fname(ext) {
+    var parts = ['ascii'];
+    if (state.mode === 'words') {
+      parts.push('words');
+      var w = (state.word || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '').slice(0, 28);
+      if (w) parts.push(w);
+      if (state.wordFill && state.wordFill !== 'solid') parts.push(state.wordFill);
+      if (state.wordFill === '3d' && state.wordPal && state.wordPal !== 'mono') parts.push(state.wordPal);
+    } else if (state.mode === 'image') {
+      parts.push('image', state.colour);
+    } else {
+      parts.push(state.engine, state.colour);
+    }
+    if (state.bg === 'creme') parts.push('creme');
+    parts.push(stamp());
+    return parts.join('-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '') + '.' + ext;
+  }
 
   function downloadBlob(blob, name) {
     var url = URL.createObjectURL(blob);
@@ -3394,6 +3513,70 @@
     toast('look · ' + name);
   }
 
+  /* ---------- LOOK SWATCHES — turn each LOOK button into a square mini-swatch
+     made of characters. Each tile shows a static patch of that look's OWN charset
+     ramp (so blocks looks show blocks, binary shows 0/1, etc.) tinted to its
+     palette: a solid ink colour, or a clipped gradient for the spectrum/fire/ice/
+     neon looks, over that look's stage background. The plain-text name in the
+     markup stays as the no-JS fallback; here we replace it with [tex][name]. The
+     data-look attr + button element are untouched, so the existing delegated click
+     handler and setPressed() selection keep working. ---------- */
+  function looksField(ramp, rows, cols, seed) {
+    // a small deterministic plasma-ish field -> reads as a patch of ASCII art
+    // (not flat repetition); seeded per look so every swatch differs.
+    var n = ramp.length - 1, out = '';
+    for (var y = 0; y < rows; y++) {
+      for (var x = 0; x < cols; x++) {
+        var a = Math.sin(x * 0.85 + y * 0.55 + seed * 0.13) *
+                Math.cos(x * 0.5 - y * 0.9 + seed * 0.07);
+        var b = Math.sin((x + y) * 0.7 + seed * 0.21);
+        var v = 0.5 + 0.5 * (a * 0.6 + b * 0.4);
+        if (v < 0) v = 0; else if (v > 1) v = 1;
+        out += ramp.charAt(Math.round(v * n));
+      }
+      if (y < rows - 1) out += '\n';
+    }
+    return out;
+  }
+  function buildLookSwatches() {
+    if (!segLooks) return;
+    var btns = segLooks.querySelectorAll('button[data-look]');
+    for (var i = 0; i < btns.length; i++) {
+      var btn = btns[i];
+      var name = btn.dataset.look;
+      var look = LOOKS[name]; if (!look) continue;
+      var C = COLOURS[look.k] || COLOURS.phosphor;
+      // the look's own charset ramp (matches how applyPreset resolves charset)
+      var ramp = CHARSETS[look.c || (look.e === 'donut' ? 'donut' : 'standard')] || CHARSETS.standard;
+      var seed = 0; for (var s = 0; s < name.length; s++) seed += name.charCodeAt(s) * (s + 3);
+      var field = looksField(ramp, 6, 8, seed);
+
+      btn.style.background = C.bg;                       // the look's stage bg
+      if (C.paper) btn.classList.add('lk-light'); else btn.classList.remove('lk-light');
+
+      var tex = document.createElement('span');
+      tex.className = 'looktex';
+      tex.setAttribute('aria-hidden', 'true');
+      tex.textContent = field;
+      if (C.grad && C.stops) {
+        var cols = C.stops.map(function (c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }).join(',');
+        tex.style.backgroundImage = 'linear-gradient(135deg,' + cols + ')';
+        tex.style.webkitBackgroundClip = 'text';
+        tex.style.backgroundClip = 'text';
+        tex.style.color = 'transparent';
+      } else {
+        tex.style.color = 'rgb(' + C.ink[0] + ',' + C.ink[1] + ',' + C.ink[2] + ')';
+      }
+      var nm = document.createElement('span');
+      nm.className = 'lookname';
+      nm.textContent = name;
+
+      btn.textContent = '';                              // drop the fallback text
+      btn.appendChild(tex);
+      btn.appendChild(nm);
+    }
+  }
+
   // mark the active button (aria-pressed) within a delegated chip group
   function setPressed(groupEl, attr, value) {
     var btns = groupEl.querySelectorAll('button');
@@ -3695,6 +3878,7 @@
   btnShow.addEventListener('click', showBar);
 
   /* ---------- LOOKS / ACTIONS / EXPORT wiring ---------- */
+  buildLookSwatches();          // upgrade the LOOK buttons into character swatches
   if (segLooks) segLooks.addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn || !btn.dataset.look) return;
