@@ -2570,8 +2570,8 @@
     // can click the thumbnail to return to it. No surprise clearing. Looks are a
     // generative concept, so they also return the top-level mode to generative.
     state.mode     = 'generative';
-    lastGenEngine = p.e;
-    state.engine   = p.e;
+    // KEEP the user's current engine — a LOOK only restyles (charset/colour/speed/cell/seed),
+    // it does not switch engines (you pick the engine; the look dresses it).
     if (p.c) state.charset = p.c;
     else state.charset = (p.e === 'donut') ? 'donut' : 'standard';
     state.colour   = p.k;
@@ -2604,7 +2604,7 @@
     for (var name in LOOKS) {
       var p = LOOKS[name];
       var c = p.c || (p.e === 'donut' ? 'donut' : 'standard');
-      if (state.engine === p.e && state.charset === c && state.colour === p.k &&
+      if (state.charset === c && state.colour === p.k &&
           Math.round(state.speed * 100) === p.sp && state.cell === p.ce &&
           (state.seed | 0) === (p.sd | 0)) {
         return name;
