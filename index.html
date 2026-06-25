@@ -3500,12 +3500,18 @@
 
   // pointer reactivity
   function onPointer(ev) {
-    pointer.active = true;
     // stage-relative: subtract the rail offset so cell 0,0 is the stage corner
-    pointer.x = ev.clientX - rectL;
-    pointer.y = ev.clientY - rectT;
-    pointer.gx = (pointer.x / cw) | 0;
-    pointer.gy = (pointer.y / ch) | 0;
+    var px = ev.clientX - rectL, py = ev.clientY - rectT;
+    // only react when the pointer is over the STAGE (the art), not the rail/off-screen
+    if (px < 0 || py < 0 || px >= vw || py >= vh) {
+      if (pointer.active) { pointer.active = false; if (reduce) start(); }
+      return;
+    }
+    pointer.active = true;
+    pointer.x = px;
+    pointer.y = py;
+    pointer.gx = (px / cw) | 0;
+    pointer.gy = (py / ch) | 0;
     if (reduce) start();
   }
   window.addEventListener('pointermove', onPointer, { passive: true });
