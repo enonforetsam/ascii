@@ -507,11 +507,21 @@
   <div class="controls" role="group" aria-label="Instrument controls">
     <div class="group">
       <span class="lab" id="lab-engine">Engine</span>
-      <div class="tabs" role="group" aria-labelledby="lab-engine">
+      <div class="tabs cols2" role="group" aria-labelledby="lab-engine">
         <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
         <button class="tab" id="eng-matrix" data-engine="matrix" type="button" aria-pressed="false">matrix</button>
         <button class="tab" id="eng-plasma" data-engine="plasma" type="button" aria-pressed="false">plasma</button>
+        <button class="tab" id="eng-image" data-engine="image" type="button" aria-pressed="false">image</button>
       </div>
+    </div>
+
+    <div class="group">
+      <span class="lab" id="lab-image">Image</span>
+      <div class="tabs cols2" role="group" aria-labelledby="lab-image">
+        <button class="tab" id="img-insert" type="button" aria-label="Insert an image to convert to ASCII">insert</button>
+        <button class="tab" id="img-invert" type="button" aria-pressed="false" aria-label="Invert image luminance mapping">invert</button>
+      </div>
+      <input type="file" id="img-file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;left:-9999px" aria-hidden="true" tabindex="-1">
     </div>
 
     <div class="group">
@@ -641,7 +651,8 @@
     speed:   1.0,    // 0..2 multiplier
     cell:    12,     // logical px per cell
     contrast:1.0,    // 0.4..2.2 gamma-ish multiplier
-    seed:    0        // integer; feeds the seeded PRNG for reproducible variation
+    seed:    0,       // integer; feeds the seeded PRNG for reproducible variation
+    invert:  false    // image engine: invert the luminance->glyph mapping
   };
 
   // DEFAULTS — the canonical baseline. writeHash() trims any key equal to its
@@ -762,6 +773,7 @@
     // reset per-engine state that depends on grid dims
     Matrix.reset();
     Donut.reset();
+    Image_.invalidate();   // grid size changed -> re-sample the image
 
     atlasDirty = true;
   }
@@ -979,6 +991,119 @@
     }
 
     return { render: render, setTime: setTime };
+  })();
+
+  /* ====================================================================
+     ENGINE 4 — IMAGE  (Media -> ASCII : the headline differentiator)
+     The user inserts an image; we sample it into the cell grid as luminance
+     and let the SHARED character buffer (lum[]/glyph[]) carry it — so the
+     converted image instantly works with copy-as-text and every export.
+
+     The sample is essentially STATIC: it's recomputed only when the source
+     image, the grid (resize/cell), the charset, the contrast, or the invert
+     toggle changes — NOT every frame. render() just copies the cached grid.
+
+     ASPECT CORRECTION: on-screen cells are square (cell x cell px) but a
+     monospace glyph reads ~0.5 as wide as it is tall. So a grid of cols x rows
+     cells covers an EFFECTIVE drawable region of (cols*CHAR_ASPECT) x rows
+     "image units". We contain (letterbox) the image into that region so a
+     circle stays a circle, not a vertical oval.
+     ==================================================================== */
+  var Image_ = (function () {
+    var CHAR_ASPECT = 0.5;      // glyph width / height
+    var srcImg = null;          // the held HTMLImageElement / ImageBitmap
+    var cache = null;           // Float32Array(gridN): sampled luminance per cell
+    var cacheDirty = true;      // recompute on next render/sample
+    var off = document.createElement('canvas');
+    var octx = off.getContext('2d', { willReadFrequently: true });
+
+    function hasImage() { return !!srcImg; }
+    function setImage(img) { srcImg = img; cacheDirty = true; }
+    function invalidate() { cacheDirty = true; }
+
+    // Sample the source image into cache[] at the current grid size, applying
+    // aspect correction, contrast and invert. Returns false if no image yet.
+    function sample() {
+      cacheDirty = false;
+      if (!cache || cache.length !== gridN) cache = new Float32Array(gridN);
+      cache.fill(0);
+      if (!srcImg) return false;
+
+      var iw = srcImg.naturalWidth || srcImg.width;
+      var ih = srcImg.naturalHeight || srcImg.height;
+      if (!iw || !ih) return false;
+
+      // Effective grid in image-pixel-aspect units: each cell is CHAR_ASPECT
+      // wide and 1 tall, so the grid spans (cols*CHAR_ASPECT) x rows units.
+      var gridAspect = (cols * CHAR_ASPECT) / rows;   // w/h of the drawable region
+      var imgAspect  = iw / ih;
+
+      // CONTAIN: fit the whole image inside the grid (letterbox), preserving
+      // the image's aspect. Compute the sub-rectangle of the grid the image
+      // occupies (in cell units, with X measured in CHAR_ASPECT-wide units).
+      var drawWcells, drawHcells; // size in CELLS the image fills
+      if (imgAspect > gridAspect) {
+        // image wider than grid -> full width, letterbox top/bottom
+        drawWcells = cols;
+        drawHcells = (cols * CHAR_ASPECT) / imgAspect;   // rows it spans
+      } else {
+        // image taller -> full height, pillarbox left/right
+        drawHcells = rows;
+        drawWcells = (rows * imgAspect) / CHAR_ASPECT;   // cols it spans
+      }
+      var ox = Math.round((cols - drawWcells) / 2);
+      var oy = Math.round((rows - drawHcells) / 2);
+      var dw = Math.max(1, Math.round(drawWcells));
+      var dh = Math.max(1, Math.round(drawHcells));
+
+      // Draw the image into an offscreen canvas exactly dw x dh pixels (one
+      // pixel == one cell). The browser's bilinear downscale gives a clean
+      // per-cell average; then we read it back.
+      off.width = dw; off.height = dh;
+      octx.setTransform(1, 0, 0, 1, 0, 0);
+      octx.clearRect(0, 0, dw, dh);
+      try { octx.drawImage(srcImg, 0, 0, dw, dh); }
+      catch (e) { return false; }
+
+      var data;
+      try { data = octx.getImageData(0, 0, dw, dh).data; }
+      catch (e) { return false; }   // tainted canvas guard
+
+      for (var yy = 0; yy < dh; yy++) {
+        var gy = oy + yy;
+        if (gy < 0 || gy >= rows) continue;
+        for (var xx = 0; xx < dw; xx++) {
+          var gx = ox + xx;
+          if (gx < 0 || gx >= cols) continue;
+          var p = (yy * dw + xx) * 4;
+          var a = data[p + 3] / 255;
+          // luminance (Rec.709). Transparent pixels read as background (0).
+          var L = (0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2]) / 255;
+          L = L * a;
+          // contrast is applied uniformly in paint() (like every engine) — keep
+          // the cache RAW so the Contrast knob isn't double-applied for images.
+          if (state.invert) L = 1 - L;
+          if (L < 0) L = 0; else if (L > 1) L = 1;
+          cache[gy * cols + gx] = L;
+        }
+      }
+      return true;
+    }
+
+    // render(dt) — static: ensure the sample is current, then copy into the
+    // shared buffer. glyph[]=0 everywhere so paint()/gridToText() derive the
+    // glyph from the active ramp by luminance (index 0 == blank).
+    function render() {
+      if (cacheDirty || !cache || cache.length !== gridN) sample();
+      glyph.fill(0);
+      if (cache && cache.length === gridN) lum.set(cache);
+      else lum.fill(0);
+    }
+
+    return {
+      render: render, sample: sample, invalidate: invalidate,
+      setImage: setImage, hasImage: hasImage
+    };
   })();
 
   /* ---------- renderer: blit the atlas per non-blank cell ---------- */
@@ -1244,6 +1369,7 @@
     var sp = state.speed;
     if (state.engine === 'donut')      Donut.render(dt * sp, tiltX, tiltY);
     else if (state.engine === 'matrix') Matrix.render(dt * sp);
+    else if (state.engine === 'image')  Image_.render(dt);
     else                                Plasma.render(dt * sp);
     paint();
   }
@@ -1268,6 +1394,8 @@
     } else if (state.engine === 'matrix') {
       Matrix.reset();           // re-prime the full-height field
       Matrix.render(0.4);       // larger settle step advances heads into view
+    } else if (state.engine === 'image') {
+      Image_.render(0);         // static sample (recomputes if dirty)
     } else {
       Plasma.setTime(3.0);      // fixed developed phase (deterministic)
       Plasma.render(0);
@@ -1322,7 +1450,8 @@
     for (var i = 0; i < parts.length; i++) {
       var kv = parts[i].split('=');
       var k = kv[0], val = kv[1];
-      if (k === 'e' && (val === 'donut' || val === 'matrix' || val === 'plasma')) state.engine = val;
+      if (k === 'e' && (val === 'donut' || val === 'matrix' || val === 'plasma' || val === 'image')) state.engine = val;
+      else if (k === 'iv') state.invert = (val === '1');
       else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
       else if (k === 'sp') { var sp = clampInt(val, 0, 200); if (sp !== null) state.speed = sp / 100; }
@@ -1356,6 +1485,8 @@
       var key = order[i];
       if (cur[key] !== def[key]) out.push(key + '=' + cur[key]);
     }
+    // invert is image-only; append iv=1 only when set (default false -> omitted)
+    if (state.invert) out.push('iv=1');
     return out.length ? '#' + out.join('&') : '#';
   }
   function writeHash() {
@@ -1389,6 +1520,9 @@
   var btnAns     = document.getElementById('exp-ans');
   var btnPng     = document.getElementById('exp-png');
   var btnRec     = document.getElementById('exp-rec');
+  var imgFile    = document.getElementById('img-file');
+  var btnInsert  = document.getElementById('img-insert');
+  var btnInvert  = document.getElementById('img-invert');
   var toastEl    = document.getElementById('toast');
 
   /* ---------- toast: self-contained, theme-coloured, fades after ~1.6s ---- */
@@ -1577,16 +1711,31 @@
     setPressed(segEngine, 'data-engine', state.engine);
     setPressed(segCharset, 'data-ramp', state.charset);
     setPressed(segColour, 'data-colour', state.colour);
+    var biv = document.getElementById('img-invert');
+    if (biv) biv.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
     syncSliderLabels();
     syncLook();
   }
 
   function setEngine(e) {
-    if (state.engine === e) return;
+    if (state.engine === e) {
+      // re-tapping 'image' with no image yet -> prompt for one
+      if (e === 'image' && !Image_.hasImage()) openPicker();
+      return;
+    }
     state.engine = e;
     atlasDirty = true; // matrix needs its glyph set baked
     syncControls();
     writeHash();
+    if (e === 'image') {
+      Image_.invalidate();
+      if (!Image_.hasImage()) {
+        // selecting image with nothing loaded: open the picker rather than
+        // render a blank stage.
+        openPicker();
+        toast('insert an image');
+      }
+    }
     if (reduce) start(); // re-render the single static frame
   }
 
@@ -1649,6 +1798,7 @@
     state.contrast = (+slContrast.value) / 100;
     slContrast.setAttribute('aria-valuetext', slContrast.value + ' percent');
     valContrast.textContent = slContrast.value;
+    Image_.invalidate();   // contrast feeds the image sample
     writeHash();
     if (reduce) start();
   });
@@ -1691,6 +1841,82 @@
       btnRec.addEventListener('click', toggleRec);
     }
   }
+
+  /* ---------- IMAGE insert / invert / drag-drop / paste ---------- */
+
+  function openPicker() { if (imgFile) imgFile.click(); }
+
+  // Load a dataURL into an Image, store it, switch to the image engine,
+  // recompute + render, toast. Shared by file picker, drag-drop, paste.
+  function loadImageFromURL(url, label) {
+    var img = new Image();
+    img.onload = function () {
+      Image_.setImage(img);
+      var switching = state.engine !== 'image';
+      state.engine = 'image';
+      atlasDirty = true;
+      Image_.invalidate();
+      syncControls();
+      writeHash();
+      start();   // (re)render with the new sample (reduced-motion has no loop)
+      toast(label || ('image · ' + img.naturalWidth + 'x' + img.naturalHeight));
+    };
+    img.onerror = function () { toast('image failed to load'); };
+    img.src = url;
+  }
+
+  // Read a File (image) -> dataURL -> loadImageFromURL.
+  function loadImageFile(file) {
+    if (!file || !/^image\//.test(file.type)) { toast('not an image'); return; }
+    var fr = new FileReader();
+    fr.onload = function () { loadImageFromURL(fr.result, 'image · ' + file.name); };
+    fr.onerror = function () { toast('read failed'); };
+    fr.readAsDataURL(file);
+  }
+
+  if (btnInsert) btnInsert.addEventListener('click', openPicker);
+  if (imgFile) imgFile.addEventListener('change', function () {
+    if (imgFile.files && imgFile.files[0]) loadImageFile(imgFile.files[0]);
+    imgFile.value = '';   // allow re-picking the same file
+  });
+
+  function setInvert(on) {
+    state.invert = !!on;
+    if (btnInvert) btnInvert.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
+    Image_.invalidate();
+    writeHash();
+    if (state.engine === 'image') start();
+  }
+  if (btnInvert) btnInvert.addEventListener('click', function () { setInvert(!state.invert); });
+
+  // DRAG-AND-DROP anywhere on the page loads an image + switches to image.
+  window.addEventListener('dragover', function (e) {
+    if (e.dataTransfer) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+  });
+  window.addEventListener('drop', function (e) {
+    if (!e.dataTransfer) return;
+    var f = null, dt = e.dataTransfer;
+    if (dt.files && dt.files.length) {
+      for (var i = 0; i < dt.files.length; i++) {
+        if (/^image\//.test(dt.files[i].type)) { f = dt.files[i]; break; }
+      }
+    }
+    if (f) { e.preventDefault(); loadImageFile(f); }
+  });
+
+  // PASTE an image from the clipboard (Ctrl/Cmd+V). Best-effort + guarded.
+  window.addEventListener('paste', function (e) {
+    try {
+      var items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file' && /^image\//.test(items[i].type)) {
+          var f = items[i].getAsFile();
+          if (f) { e.preventDefault(); loadImageFile(f); return; }
+        }
+      }
+    } catch (err) { /* clipboard image unavailable; ignore */ }
+  });
 
   // 'C' copies the grid as text (ignored while typing / with modifiers)
   window.addEventListener('keydown', function (ev) {
@@ -1753,6 +1979,12 @@
   writeHash();
   resize();
   start();
+
+  // a shared #e=image link opens the image engine with no image bytes (they're
+  // not shareable via hash) — prompt for one instead of showing a blank stage.
+  if (state.engine === 'image' && !Image_.hasImage()) {
+    toast('insert an image to convert');
+  }
 })();
 </script>
 </body>
