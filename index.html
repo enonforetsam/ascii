@@ -1428,15 +1428,126 @@
        fill engine   : engine renders into lum[] then lum[i] *= mask[i]  (the
                        animated field is cut to the letter shapes; outside = blank)
      ==================================================================== */
+  /* ====================================================================
+     BITMAP PIXEL FONT — a compact public-domain 5x7 glyph set (the classic
+     "thin 5x7 LED/terminal" cell). Each glyph is 5 columns wide, 7 rows tall,
+     stored as 5 column-bytes (LSB = top row). This is INLINE DATA, not a web
+     font, so the words-3d render produces CRISP on/off pixels (no vector-font
+     anti-aliasing) that integer-scale into uniform square blocks — matching the
+     reference 8-bit pixel-logo look. Covers A-Z (upper-cased), 0-9, space and
+     common punctuation. Lower-case maps to upper-case for a chunky display feel.
+     ==================================================================== */
+  var FONT5x7 = (function () {
+    // Each entry: 5 hex column bytes, bit0=top row ... bit6=row7 (7 rows used).
+    // Authored as binary strings (top->bottom) per column for readability, then
+    // packed. '#'=on. A small classic 5x7 set (BSD/X11-style glyph shapes).
+    var rows = {
+      ' ': ['00000','00000','00000','00000','00000','00000','00000'],
+      'A': ['01110','10001','10001','11111','10001','10001','10001'],
+      'B': ['11110','10001','10001','11110','10001','10001','11110'],
+      'C': ['01110','10001','10000','10000','10000','10001','01110'],
+      'D': ['11110','10001','10001','10001','10001','10001','11110'],
+      'E': ['11111','10000','10000','11110','10000','10000','11111'],
+      'F': ['11111','10000','10000','11110','10000','10000','10000'],
+      'G': ['01110','10001','10000','10111','10001','10001','01111'],
+      'H': ['10001','10001','10001','11111','10001','10001','10001'],
+      'I': ['11111','00100','00100','00100','00100','00100','11111'],
+      'J': ['00111','00010','00010','00010','00010','10010','01100'],
+      'K': ['10001','10010','10100','11000','10100','10010','10001'],
+      'L': ['10000','10000','10000','10000','10000','10000','11111'],
+      'M': ['10001','11011','10101','10101','10001','10001','10001'],
+      'N': ['10001','10001','11001','10101','10011','10001','10001'],
+      'O': ['01110','10001','10001','10001','10001','10001','01110'],
+      'P': ['11110','10001','10001','11110','10000','10000','10000'],
+      'Q': ['01110','10001','10001','10001','10101','10010','01101'],
+      'R': ['11110','10001','10001','11110','10100','10010','10001'],
+      'S': ['01111','10000','10000','01110','00001','00001','11110'],
+      'T': ['11111','00100','00100','00100','00100','00100','00100'],
+      'U': ['10001','10001','10001','10001','10001','10001','01110'],
+      'V': ['10001','10001','10001','10001','10001','01010','00100'],
+      'W': ['10001','10001','10001','10101','10101','11011','10001'],
+      'X': ['10001','10001','01010','00100','01010','10001','10001'],
+      'Y': ['10001','10001','01010','00100','00100','00100','00100'],
+      'Z': ['11111','00001','00010','00100','01000','10000','11111'],
+      '0': ['01110','10001','10011','10101','11001','10001','01110'],
+      '1': ['00100','01100','00100','00100','00100','00100','01110'],
+      '2': ['01110','10001','00001','00010','00100','01000','11111'],
+      '3': ['11111','00010','00100','00010','00001','10001','01110'],
+      '4': ['00010','00110','01010','10010','11111','00010','00010'],
+      '5': ['11111','10000','11110','00001','00001','10001','01110'],
+      '6': ['00110','01000','10000','11110','10001','10001','01110'],
+      '7': ['11111','00001','00010','00100','01000','01000','01000'],
+      '8': ['01110','10001','10001','01110','10001','10001','01110'],
+      '9': ['01110','10001','10001','01111','00001','00010','01100'],
+      '.': ['00000','00000','00000','00000','00000','01100','01100'],
+      ',': ['00000','00000','00000','00000','01100','00100','01000'],
+      '!': ['00100','00100','00100','00100','00100','00000','00100'],
+      '?': ['01110','10001','00001','00010','00100','00000','00100'],
+      ':': ['00000','01100','01100','00000','01100','01100','00000'],
+      ';': ['00000','01100','01100','00000','01100','00100','01000'],
+      '-': ['00000','00000','00000','11111','00000','00000','00000'],
+      '+': ['00000','00100','00100','11111','00100','00100','00000'],
+      '=': ['00000','00000','11111','00000','11111','00000','00000'],
+      '/': ['00001','00010','00010','00100','01000','01000','10000'],
+      '\\':['10000','01000','01000','00100','00010','00010','00001'],
+      '*': ['00000','10101','01110','11111','01110','10101','00000'],
+      '#': ['01010','01010','11111','01010','11111','01010','01010'],
+      '@': ['01110','10001','10111','10101','10111','10000','01110'],
+      '&': ['01100','10010','10010','01100','10101','10010','01101'],
+      '(': ['00010','00100','01000','01000','01000','00100','00010'],
+      ')': ['01000','00100','00010','00010','00010','00100','01000'],
+      '\'':['00100','00100','00100','00000','00000','00000','00000'],
+      '"': ['01010','01010','01010','00000','00000','00000','00000'],
+      '_': ['00000','00000','00000','00000','00000','00000','11111'],
+      '<': ['00010','00100','01000','10000','01000','00100','00010'],
+      '>': ['01000','00100','00010','00001','00010','00100','01000'],
+      '%': ['11001','11010','00010','00100','01000','01011','10011'],
+      '$': ['00100','01111','10100','01110','00101','11110','00100']
+    };
+    var W = 5, H = 7;
+    var glyphs = {};
+    for (var ch in rows) {
+      if (!rows.hasOwnProperty(ch)) continue;
+      var r = rows[ch];
+      // pack into per-row bit fields: bit (W-1-col) set when '#'/'1'
+      var g = new Uint8Array(H);
+      for (var ry = 0; ry < H; ry++) {
+        var bits = 0, s = r[ry];
+        for (var cx = 0; cx < W; cx++) if (s.charAt(cx) === '1') bits |= (1 << (W - 1 - cx));
+        g[ry] = bits;
+      }
+      glyphs[ch] = g;
+    }
+    function glyphFor(ch) {
+      if (glyphs[ch]) return glyphs[ch];
+      var up = ch.toUpperCase();
+      if (glyphs[up]) return glyphs[up];
+      return null; // unknown -> caller renders blank advance
+    }
+    // returns true if pixel (col,row) of char ch is lit (0..W-1, 0..H-1)
+    function lit(ch, col, row) {
+      var g = glyphFor(ch);
+      if (!g || row < 0 || row >= H || col < 0 || col >= W) return false;
+      return (g[row] & (1 << (W - 1 - col))) !== 0;
+    }
+    return { W: W, H: H, lit: lit, has: function (ch) { return !!glyphFor(ch); } };
+  })();
+
   var Words = (function () {
     var CHAR_ASPECT = 0.5;       // glyph width / height — same model as Image_
     var mask = null;             // Float32Array(gridN): letter coverage 0..1
     var dirty = true;
     var keyText = '', keyCols = 0, keyRows = 0;  // cache invalidation key
+    // BITMAP-FONT pixel layout for the 3D path (crisp on/off blocks). Cached
+    // alongside the vector mask; rebuilt by the same cache key.
+    var pix = null;              // Uint8Array(gridN): 1 = lit FACE pixel-block
+    var pixMinX=0, pixMaxX=-1, pixMinY=0, pixMaxY=-1; // lit bbox in cells
+    var pixDirty = true;
+    var pixKeyText = '', pixKeyCols = 0, pixKeyRows = 0;
     var off = document.createElement('canvas');
     var octx = off.getContext('2d', { willReadFrequently: true });
 
-    function invalidate() { dirty = true; }
+    function invalidate() { dirty = true; pixDirty = true; }
 
     // Rebuild the mask if the text or grid changed since the last build.
     function ensure() {
@@ -1534,6 +1645,152 @@
       }
     }
 
+    // BITMAP PIXEL LAYOUT (words-3d). Lays the typed text out from the inline
+    // 5x7 bitmap font into the cell grid as CRISP on/off pixel-blocks, integer-
+    // scaled so every font pixel becomes an S×S square of cells (uniform chunky
+    // blocks, no anti-aliasing). Auto-fits the largest integer scale + line
+    // layout that fits; wraps to extra lines only if a single line can't fit at
+    // scale>=1. Reserves room on the down/right for the 3D extrude depth so the
+    // whole logo (face + depth) stays on-grid.
+    function ensurePixels() {
+      var txt = (state.word == null ? '' : String(state.word));
+      if (!pixDirty && txt === pixKeyText && cols === pixKeyCols && rows === pixKeyRows &&
+          pix && pix.length === gridN) return;
+      buildPixels(txt);
+    }
+
+    function buildPixels(txt) {
+      pixDirty = false;
+      pixKeyText = txt; pixKeyCols = cols; pixKeyRows = rows;
+      if (!pix || pix.length !== gridN) pix = new Uint8Array(gridN);
+      pix.fill(0);
+      pixMinX = 0; pixMaxX = -1; pixMinY = 0; pixMaxY = -1;
+
+      var FW = FONT5x7.W, FH = FONT5x7.H;
+      var words = txt.split(/\s+/).filter(function (w) { return w.length; });
+      if (!words.length) return;
+
+      // Tokenise into a flat char list per word; layout wraps word-by-word.
+      // Inter-glyph gap = 1 font pixel; words on the same line get a wider gap.
+      var GAP = 2;           // font-pixel cols between glyphs (>= depth so the 3D extrude of one letter never bleeds into the next)
+      var WGAP = FW + 1;     // font-pixel columns between words on a line (a space)
+      var LGAP = 2;          // font-pixel rows between text lines
+
+      // For a given scale S and max line width (in cells), greedily wrap words
+      // into lines; return the line list (each = array of words) and the pixel
+      // dimensions, or null if even one word overflows the width at this scale.
+      function layout(S, depthD) {
+        // available cells, leaving room for the diagonal extrude depth (down+right)
+        var availCols = cols - depthD;
+        var availRows = rows - depthD;
+        if (availCols < FW * S || availRows < FH * S) return null;
+        // word pixel-width helper (font pixels)
+        function wWidth(w) { return w.length * FW + (w.length - 1) * GAP; }
+        var lines = [], cur = [], curW = 0;
+        for (var i = 0; i < words.length; i++) {
+          var w = words[i];
+          if (wWidth(w) * S > availCols) {
+            // single word too wide at this scale -> fail (caller lowers S)
+            return null;
+          }
+          var add = (cur.length ? WGAP : 0) + wWidth(w);
+          if (cur.length && (curW + add) * S > availCols) {
+            lines.push(cur); cur = [w]; curW = wWidth(w);
+          } else {
+            cur.push(w); curW += add;
+          }
+        }
+        if (cur.length) lines.push(cur);
+        // total pixel height
+        var totH = lines.length * FH + (lines.length - 1) * LGAP;
+        if (totH * S > availRows) return null;
+        // max pixel width across lines
+        var maxW = 0;
+        for (var li = 0; li < lines.length; li++) {
+          var lw = 0;
+          for (var k = 0; k < lines[li].length; k++) {
+            lw += lines[li][k].length * FW + (lines[li][k].length - 1) * GAP;
+            if (k) lw += WGAP;
+          }
+          if (lw > maxW) maxW = lw;
+        }
+        return { lines: lines, pw: maxW, ph: totH, S: S };
+      }
+
+      // depth scales with S; estimate before final S is known by trying largest S
+      // down to 1, recomputing depth each time (depth ~ 1.6*S, clamped).
+      var best = null;
+      for (var S = Math.max(rows, cols); S >= 1 && !best; S--) {
+        var D = depthForScale(S);
+        var lay = layout(S, D);
+        if (lay) best = { lay: lay, D: D };
+      }
+      if (!best) return; // shouldn't happen (S=1 with depth 0-ish always fits-ish)
+
+      var S2 = best.lay.S, D2 = best.D;
+      var pw = best.lay.pw, ph = best.lay.ph;
+      // centre the block within the available (cells minus depth) area
+      var availCols = cols - D2, availRows = rows - D2;
+      var ox = Math.floor((availCols - pw * S2) / 2);
+      var oy = Math.floor((availRows - ph * S2) / 2);
+      if (ox < 0) ox = 0; if (oy < 0) oy = 0;
+
+      // stamp each line of words
+      var lineYpx = 0;
+      for (var li2 = 0; li2 < best.lay.lines.length; li2++) {
+        var line = best.lay.lines[li2];
+        // line is centred horizontally too
+        var lwpx = 0;
+        for (var ki = 0; ki < line.length; ki++) {
+          lwpx += line[ki].length * FW + (line[ki].length - 1) * GAP;
+          if (ki) lwpx += WGAP;
+        }
+        var lineXpx = Math.floor((pw - lwpx) / 2);
+        var penX = lineXpx;
+        for (var wi = 0; wi < line.length; wi++) {
+          var word = line[wi];
+          for (var ci = 0; ci < word.length; ci++) {
+            var ch = word.charAt(ci);
+            stampGlyph(ch, ox + penX * S2, oy + lineYpx * S2, S2);
+            penX += FW + GAP;
+          }
+          penX += WGAP - GAP; // word separator (we already advanced one GAP)
+        }
+        lineYpx += FH + LGAP;
+      }
+    }
+
+    function depthForScale(S) {
+      var D = Math.round(S * 1.3);
+      if (D < 1) D = 1;
+      if (D > 9) D = 9;
+      return D;
+    }
+
+    // stamp one bitmap glyph at cell (cx0,cy0) at integer scale S into pix[].
+    function stampGlyph(ch, cx0, cy0, S) {
+      var FW = FONT5x7.W, FH = FONT5x7.H;
+      for (var ry = 0; ry < FH; ry++) {
+        for (var rx = 0; rx < FW; rx++) {
+          if (!FONT5x7.lit(ch, rx, ry)) continue;
+          var bx = cx0 + rx * S, by = cy0 + ry * S;
+          for (var sy = 0; sy < S; sy++) {
+            var yy = by + sy; if (yy < 0 || yy >= rows) continue;
+            var rowOff = yy * cols;
+            for (var sx = 0; sx < S; sx++) {
+              var xx = bx + sx; if (xx < 0 || xx >= cols) continue;
+              pix[rowOff + xx] = 1;
+              if (pixMaxX < 0) { pixMinX = pixMaxX = xx; pixMinY = pixMaxY = yy; }
+              if (xx < pixMinX) pixMinX = xx;
+              if (xx > pixMaxX) pixMaxX = xx;
+              if (yy < pixMinY) pixMinY = yy;
+              if (yy > pixMaxY) pixMaxY = yy;
+            }
+          }
+        }
+      }
+    }
+
     // Multiply the freshly-rendered lum[] by the letter mask (engine fills).
     function applyMask() {
       ensure();
@@ -1550,42 +1807,33 @@
     }
 
     // 3D BLOCK letters: extruded, multi-colour, STATIC.
-    //  - FACE  cells = where the mask is set (coverage >= a threshold) -> bright
-    //    full block, drawn on top.
-    //  - SIDE  cells = reachable by offsetting a face cell by 1..D in the down-
-    //    right extrude direction (+1col,+1row per step) and NOT themselves a face
-    //    -> a DARKER block (the bevel that makes it read 3D).
-    //  Forces the full-block glyph '█' for both, and writes a per-cell colour
-    //  (cellCol) by X-position bands from the active palette ('mono' -> theme ink,
-    //  per-cell off). Depth D auto-scales to the letter height.
+    //  Now driven by the INLINE BITMAP FONT (FONT5x7) — crisp on/off pixel-blocks
+    //  integer-scaled into the grid (no vector-font anti-aliasing), so the letters
+    //  read as a retro 8-bit pixel logo. For each lit font-pixel:
+    //   - FACE cells = bright solid palette block ('█'), drawn on top.
+    //   - DEPTH cells = the extruded side, walked 1..D in the down-right diagonal.
+    //     Rendered as a LIGHTER shade of the band colour with the BLOCK GRID
+    //     showing (a checker of '█' + '▓' on a per-cell basis), so the depth reads
+    //     as "built from 3D blocks" rather than a flat darker shadow.
+    //  Per-cell colour (cellCol) comes from X-position bands of the active palette
+    //  ('mono' -> theme ink). Depth D auto-scales to the integer font scale.
     function render3d() {
-      ensure();
+      ensurePixels();
       lum.fill(0);
       glyph.fill(0);
       if (cellCol) cellCol.fill(-1);
       colActive = false;
-      if (!mask || mask.length !== gridN) return;
+      if (!pix || pix.length !== gridN || pixMaxX < 0) return;
 
-      // FACE set from the mask (anti-aliased edges -> a firm 0.5 threshold so the
-      // blocks have crisp chunky edges, not a soft halo).
-      var FT = 0.5;
-      var face = new Uint8Array(gridN);
-      var minX = cols, maxX = -1, minY = rows, maxY = -1;
-      for (var i = 0; i < gridN; i++) {
-        if (mask[i] >= FT) {
-          face[i] = 1;
-          var fx = i % cols, fy = (i / cols) | 0;
-          if (fx < minX) minX = fx; if (fx > maxX) maxX = fx;
-          if (fy < minY) minY = fy; if (fy > maxY) maxY = fy;
-        }
-      }
-      if (maxX < 0) return;   // empty word
+      var minX = pixMinX, maxX = pixMaxX, minY = pixMinY, maxY = pixMaxY;
 
-      // DEPTH auto-scales to the letter height: ~14% of the glyph height, a few
-      // cells, clamped so it stays a readable bevel (not a smear).
+      // DEPTH auto-scales to the font integer scale used in buildPixels: derive
+      // the scale back from the lit bbox isn't reliable, so recompute from the
+      // chosen layout via depthForScale on the effective scale. We approximate the
+      // scale as the letter height / font height; depth follows that.
       var letterH = (maxY - minY + 1);
-      var D = Math.max(2, Math.round(letterH * 0.18));
-      if (D > 7) D = 7;
+      var approxS = Math.max(1, Math.round(letterH / FONT5x7.H));
+      var D = depthForScale(approxS);
 
       // palette + band geometry (bands span the word's X extent).
       var pal = WORD_PALETTES[state.wordPal] || null;
@@ -1599,36 +1847,46 @@
         return pal[bi];
       }
       function pack(rgb) { return ((rgb[0] & 255) << 16) | ((rgb[1] & 255) << 8) | (rgb[2] & 255); }
+      // a LIGHTER tint of the band colour for the 3D side (mix toward white) so
+      // the depth reads as the same colour's lit side, matching the reference.
+      function lighten(rgb, t) {
+        return [ (rgb[0] + (255 - rgb[0]) * t) | 0,
+                 (rgb[1] + (255 - rgb[1]) * t) | 0,
+                 (rgb[2] + (255 - rgb[2]) * t) | 0 ];
+      }
+      var SHADE_CP = 0x2593; // '▓' — used on alternating depth cells to show grid
 
-      // SIDE pass first (face draws over it). For each face cell, walk 1..D in the
-      // down-right direction; any in-bounds non-face cell becomes a side block,
-      // coloured by ITS OWN x-band, darkened ~0.55.
+      // SIDE pass first (face draws over it). For each lit font-pixel, walk 1..D in
+      // the down-right diagonal; any in-bounds non-face cell becomes a depth block.
       for (var fi = 0; fi < gridN; fi++) {
-        if (!face[fi]) continue;
+        if (!pix[fi]) continue;
         var cx = fi % cols, cy = (fi / cols) | 0;
         for (var d = 1; d <= D; d++) {
           var sx = cx + d, sy = cy + d;
           if (sx >= cols || sy >= rows) break;
           var si = sy * cols + sx;
-          if (face[si]) continue;             // a face owns this -> skip
+          if (pix[si]) continue;              // a face owns this -> skip
           if (lum[si] > 0.001) continue;      // already a nearer side block
-          lum[si] = 0.55;
-          glyph[si] = BLOCK_CP;
-          if (pal) {
-            var srgb = bandRGB(sx);
-            cellCol[si] = pack([ (srgb[0]*0.55)|0, (srgb[1]*0.55)|0, (srgb[2]*0.55)|0 ]);
-          }
+          // checker by cell parity makes the block grid visible on the depth
+          var checker = ((sx + sy) & 1) === 0;
+          lum[si] = checker ? 0.82 : 0.62;
+          glyph[si] = checker ? BLOCK_CP : SHADE_CP;
+          var base = bandRGB(sx);
+          var sideRgb = lighten(base, checker ? 0.34 : 0.14);
+          cellCol[si] = pack(sideRgb);
         }
       }
-      // FACE pass — bright block on top, full band colour.
+      // FACE pass — bright solid block on top, full band colour.
       for (var pf = 0; pf < gridN; pf++) {
-        if (!face[pf]) continue;
+        if (!pix[pf]) continue;
         lum[pf] = 1.0;
         glyph[pf] = BLOCK_CP;
-        if (pal) cellCol[pf] = pack(bandRGB(pf % cols));
+        cellCol[pf] = pack(bandRGB(pf % cols));
       }
-      // engage the per-cell colour path only for a real (non-mono) palette.
-      colActive = !!pal;
+      // engage the per-cell colour path. For mono (no palette) the depth still
+      // needs the per-cell renderer to show its lighter tint, so keep it on; cells
+      // left at -1 fall back to theme ink in paintPerCell.
+      colActive = true;
     }
 
     // Engine fill: run the chosen engine into lum[], then cut to the mask.
@@ -1753,7 +2011,15 @@
           var b = v;
           ctx.fillStyle = 'rgb(' + ((ink[0]*b)|0) + ',' + ((ink[1]*b)|0) + ',' + ((ink[2]*b)|0) + ')';
         }
-        ctx.fillText(String.fromCodePoint(cp), x * cpw + halfW, cyp);
+        // CRISP PIXEL BLOCKS — a monospace '█' only fills ~0.6 of the cell width
+        // (vertical gutters => thin bars), so draw real filled squares. Leave a
+        // small gap so the block grid reads as separated squares (like the ref);
+        // '▓' depth cells inset more so the recessed 3D side shows its structure.
+        var rx = Math.round(x * cpw), ry = Math.round(y * cph);
+        var rw = Math.round((x + 1) * cpw) - rx, rh = Math.round((y + 1) * cph) - ry;
+        var g = rw < 5 ? 1 : Math.round(rw * 0.16);
+        if (cp === 0x2593) { g = rw < 6 ? 2 : Math.round(rw * 0.30); }
+        ctx.fillRect(rx, ry, rw - g, rh - g);
       }
     }
   }
