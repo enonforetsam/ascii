@@ -1439,31 +1439,39 @@
       }
       refresh();
     }
-    // VERTICAL DRAG: up = increase. Track the gesture from the press point so the
-    // whole range is reachable in roughly one panel-height of travel.
+    // VERTICAL DRAG: up = increase. Move/up are bound to the WINDOW for the
+    // duration of the drag (not the 46px knob), so the gesture tracks anywhere on
+    // screen — robust even when pointer capture is unavailable. Wheel also adjusts.
     var dragging = false, startY = 0, startVal = 0;
     var span = max - min;
-    knobEl.addEventListener('pointerdown', function (e) {
-      dragging = true;
-      startY = e.clientY;
-      startVal = parseFloat(input.value);
-      try { knobEl.setPointerCapture(e.pointerId); } catch (_) {}
-      e.preventDefault();
-    });
-    knobEl.addEventListener('pointermove', function (e) {
+    function onMove(e) {
       if (!dragging) return;
       var dy = startY - e.clientY;          // up is positive
       commit(startVal + (dy / 160) * span); // ~160px of travel == full range
       e.preventDefault();
-    });
-    function end(e) {
+    }
+    function onUp() {
       if (!dragging) return;
       dragging = false;
-      try { knobEl.releasePointerCapture(e.pointerId); } catch (_) {}
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    knobEl.addEventListener('pointerup', end);
-    knobEl.addEventListener('pointercancel', end);
+    knobEl.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      startY = e.clientY;
+      startVal = parseFloat(input.value);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
+      knobEl.focus();
+      e.preventDefault();
+    });
+    knobEl.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      commit(parseFloat(input.value) + (e.deltaY < 0 ? 1 : -1) * step * (e.shiftKey ? 10 : 1));
+    }, { passive: false });
     // keyboard on the dial mirrors the range (the real input also stays reachable)
     knobEl.addEventListener('keydown', function (e) {
       var d = 0;
