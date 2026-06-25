@@ -532,6 +532,7 @@
         <button class="tab" data-ramp="dots" type="button" aria-pressed="false" aria-label="dots ramp">dots</button>
         <button class="tab" data-ramp="binary" type="button" aria-pressed="false" aria-label="binary ramp">binary</button>
         <button class="tab" data-ramp="donut" type="button" aria-pressed="false" aria-label="donut ramp">donut</button>
+        <button class="tab" data-ramp="photo" type="button" aria-pressed="false" aria-label="photo ramp">photo</button>
       </div>
     </div>
 
@@ -554,7 +555,7 @@
         </div>
         <div class="knobctl">
           <div class="knob" data-for="sl-cell" role="slider" tabindex="0" aria-label="Cell size in pixels"><span class="knob-dial"></span></div>
-          <input type="range" id="sl-cell" min="7" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
+          <input type="range" id="sl-cell" min="5" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
           <div class="knoblabel"><span class="knm">Cell</span><span class="val" id="val-cell">12</span></div>
         </div>
         <div class="knobctl">
@@ -627,7 +628,11 @@
     blocks:   ' .:░▒▓█',
     dots:     ' .·:•',
     binary:   ' 01',
-    donut:    ' .,-~:;=!*#$@'
+    donut:    ' .,-~:;=!*#$@',
+    // dense Paul Bourke-style 70-level grayscale ramp (dark -> bright). Leading
+    // space => index 0 is blank; the long smooth gradient resolves photographic
+    // tone instead of the few coarse steps a short ramp gives.
+    photo:    ' .\'`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
   };
 
   // matrix uses its own glyph set (katakana + latin + symbols), forced per cell
@@ -1069,6 +1074,12 @@
       try { data = octx.getImageData(0, 0, dw, dh).data; }
       catch (e) { return false; }   // tainted canvas guard
 
+      // PASS 1 — fill the populated cells with RAW Rec.709 luminance and record
+      // each populated cell index + value (so we can normalize across exactly the
+      // image region, not the letterbox margins).
+      var cellIdx = new Int32Array(dw * dh);
+      var cellLum = new Float32Array(dw * dh);
+      var nPop = 0;
       for (var yy = 0; yy < dh; yy++) {
         var gy = oy + yy;
         if (gy < 0 || gy >= rows) continue;
@@ -1080,12 +1091,53 @@
           // luminance (Rec.709). Transparent pixels read as background (0).
           var L = (0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2]) / 255;
           L = L * a;
-          // contrast is applied uniformly in paint() (like every engine) — keep
-          // the cache RAW so the Contrast knob isn't double-applied for images.
-          if (state.invert) L = 1 - L;
           if (L < 0) L = 0; else if (L > 1) L = 1;
-          cache[gy * cols + gx] = L;
+          cellIdx[nPop] = gy * cols + gx;
+          cellLum[nPop] = L;
+          nPop++;
         }
+      }
+
+      // AUTO-LEVELS — the biggest fidelity win. A real photo's luminance occupies
+      // a narrow band, so a raw map only touches a few ramp levels and reads flat.
+      // Find robust low/high bounds via the ~2nd and ~98th PERCENTILES (robust to
+      // a few black/white outliers) using a 256-bin histogram, then linearly
+      // stretch L' = clamp((L - lo)/(hi - lo), 0, 1) so the cell tones span the
+      // FULL 0..1 range and exercise the whole ramp. Done BEFORE invert; CONTRAST
+      // stays in paint() (do NOT re-introduce it here).
+      var lo = 0, hi = 1;
+      if (nPop > 0) {
+        var hist = new Uint32Array(256);
+        for (var hI = 0; hI < nPop; hI++) {
+          var bin = (cellLum[hI] * 255 + 0.5) | 0;
+          if (bin < 0) bin = 0; else if (bin > 255) bin = 255;
+          hist[bin]++;
+        }
+        var loCount = Math.floor(nPop * 0.02);
+        var hiCount = Math.floor(nPop * 0.98);
+        var acc = 0, loBin = 0, hiBin = 255;
+        for (var b = 0; b < 256; b++) {
+          acc += hist[b];
+          if (acc > loCount) { loBin = b; break; }
+        }
+        acc = 0;
+        for (var b2 = 0; b2 < 256; b2++) {
+          acc += hist[b2];
+          if (acc >= hiCount) { hiBin = b2; break; }
+        }
+        lo = loBin / 255;
+        hi = hiBin / 255;
+      }
+      var span = Math.max(1e-4, hi - lo);
+
+      // PASS 2 — normalize, then invert, then store into the cache.
+      for (var sI = 0; sI < nPop; sI++) {
+        var Ln = (cellLum[sI] - lo) / span;
+        if (Ln < 0) Ln = 0; else if (Ln > 1) Ln = 1;
+        // contrast is applied uniformly in paint() (like every engine) — keep
+        // the cache contrast-free so the Contrast knob isn't double-applied.
+        if (state.invert) Ln = 1 - Ln;
+        cache[cellIdx[sI]] = Ln;
       }
       return true;
     }
@@ -1455,7 +1507,7 @@
       else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
       else if (k === 'sp') { var sp = clampInt(val, 0, 200); if (sp !== null) state.speed = sp / 100; }
-      else if (k === 'ce') { var ce = clampInt(val, 7, 22); if (ce !== null) state.cell = ce; }
+      else if (k === 'ce') { var ce = clampInt(val, 5, 22); if (ce !== null) state.cell = ce; }
       else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
       else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
     }
@@ -1854,10 +1906,20 @@
       Image_.setImage(img);
       var switching = state.engine !== 'image';
       state.engine = 'image';
+      // high-fidelity defaults for a photo: auto-select the dense 'photo' ramp
+      // (but only if the user is on a SHORT generative ramp — never override an
+      // explicit photo/blocks choice), and drop to a FINER cell so the grid has
+      // enough cells to resolve detail. All ramps + cells stay user-selectable.
+      if (state.charset === 'standard' || state.charset === 'donut' ||
+          state.charset === 'binary' || state.charset === 'dots') {
+        state.charset = 'photo';
+      }
+      if (state.cell > 6) state.cell = 6;
       atlasDirty = true;
       Image_.invalidate();
       syncControls();
       writeHash();
+      resize();  // cell changed -> re-fit the grid (also re-samples the image)
       start();   // (re)render with the new sample (reduced-motion has no loop)
       toast(label || ('image · ' + img.naturalWidth + 'x' + img.naturalHeight));
     };
