@@ -217,7 +217,7 @@
     font-family:var(--mono);
     font-size:11px;
     letter-spacing:.06em;
-    color:var(--ink);
+    color:#ececef;
     width:100%;
     min-height:34px;
     min-width:32px;
@@ -225,39 +225,39 @@
     cursor:pointer;
     text-shadow:none;
     border-radius:8px;
-    border:1px solid var(--line);
-    background-image:linear-gradient(180deg, #fbfbfa 0%, #e8e9e6 54%, #d6d8d3 100%);
+    border:1px solid rgba(0,0,0,.55);
+    background-color:#06060a;
+    background-image:linear-gradient(180deg, #1a1b22 0%, #101117 55%, #08090d 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.85),
-      0 2px 4px rgba(0,0,0,.20);
+      inset 0 1px 0 rgba(255,255,255,.12),
+      0 2px 4px rgba(0,0,0,.42);
     transition:transform .07s ease, box-shadow .1s ease, background-image .1s ease, color .1s ease, border-color .1s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
-    background-image:linear-gradient(180deg, #ffffff 0%, #eeefec 54%, #dddfd9 100%);
+    background-image:linear-gradient(180deg, #20212a 0%, #15161d 55%, #0c0d12 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.9),
-      0 4px 8px rgba(0,0,0,.22);
+      inset 0 1px 0 rgba(255,255,255,.16),
+      0 4px 8px rgba(0,0,0,.5);
   }
   .tab:active, .btn:active{
     transform:translateY(1px);
     box-shadow:
-      inset 0 1px 3px rgba(0,0,0,.22),
-      0 1px 1px rgba(0,0,0,.12);
+      inset 0 1px 3px rgba(0,0,0,.6),
+      0 1px 1px rgba(0,0,0,.4);
   }
-  /* LIT / pressed-in state — Fluid's .fieldBtn.on: accent ring + accent-tinted
-     face, dark ink stays legible on the soft accent. */
+  /* selected — Fluid's .fieldBtn.on: an accent ring on a brighter metallic face */
   .tab[aria-pressed="true"]{
-    color:#101010;
-    background-image:linear-gradient(180deg, #fbe2e8 0%, #f7cdd7 60%, #f0bcc8 100%);
+    color:#ffffff;
+    background-image:linear-gradient(180deg, #24262f 0%, #181922 55%, #0e0f15 100%);
     border-color:var(--accent);
     box-shadow:
-      inset 0 0 0 2px var(--accent),
-      inset 0 1px 0 rgba(255,255,255,.6),
-      0 2px 5px rgba(0,0,0,.22);
+      inset 0 0 0 1px var(--accent),
+      inset 0 1px 0 rgba(255,255,255,.16),
+      0 2px 6px rgba(0,0,0,.5);
   }
   .tab[aria-pressed="true"]:hover{
-    background-image:linear-gradient(180deg, #fde7ec 0%, #f8d3dc 60%, #f2c2ce 100%);
+    background-image:linear-gradient(180deg, #2a2c36 0%, #1c1d27 55%, #111219 100%);
   }
 
   /* uniform, always-visible focus ring */
@@ -405,12 +405,12 @@
     opacity:var(--scan-op);
   }
 
-  /* record button — active recording state pulses a red dot (on the light tile) */
+  /* record button — active recording state pulses a red dot (on the dark metal tile) */
   .tab.recording{
-    border-color:#c2160a;
-    color:#a01207;
-    background-image:linear-gradient(180deg, #ffecec 0%, #ffdada 60%, #ffcccc 100%);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.7), 0 0 8px rgba(194,22,10,.35);
+    border-color:#e0341f;
+    color:#ff8a7e;
+    background-image:linear-gradient(180deg, #2a1614 0%, #1c0f0e 55%, #120a09 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(224,52,31,.5), 0 0 9px rgba(224,52,31,.4);
   }
   .tab.recording::before{
     content:"";
