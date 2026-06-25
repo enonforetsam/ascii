@@ -1475,52 +1475,135 @@
      Pointer drops a hot ember.
      ==================================================================== */
   var Fire = (function () {
-    var heat = null;
+    // Doom-style upward heat propagation, but with structure that makes it
+    // read as a living fire rather than a uniform glowing bed:
+    //  - a per-column SOURCE intensity (base[]) modulated by wandering hot
+    //    spots so some columns roar and the gaps between them stay dark ->
+    //    distinct tapering tongues;
+    //  - strong, RANDOM per-cell cooling so tongues taper and break up into
+    //    sparse embers near the top (no hard top edge);
+    //  - a slowly-drifting WIND field that biases the horizontal source the
+    //    heat is pulled from, so tongues lean and lick frame to frame;
+    //  - glyph density gated by heat: dense at the base, sparse flickering
+    //    sparks up top.
+    var heat = null;     // current heat field (lum source)
+    var base = null;     // per-column source intensity (0..1), smoothed
     var fcols = 0, frows = 0;
-    function alloc() { fcols = cols; frows = rows; heat = new Float32Array(gridN); }
-    function reset() { reseed(); alloc(); heat.fill(0); }
+    var ft = 0;          // sim clock (drives wandering hot spots + wind)
+    // sparse spark glyphs for the cool, broken-up top of the flame
+    var SPARKS = [ 0x2e/*.*/, 0x27/*'*/, 0x60/*`*/, 0x3a/*:*/, 0x2a/* * */ ];
+    function alloc() {
+      fcols = cols; frows = rows;
+      heat = new Float32Array(gridN);
+      base = new Float32Array(cols);
+    }
+    function reset() {
+      reseed(); alloc(); heat.fill(0);
+      // prime the source row so settle()/first frame already have texture
+      for (var x = 0; x < cols; x++) base[x] = 0.55 + rng() * 0.45;
+      ft = 0;
+    }
     function render(dt) {
-      if (!heat || fcols !== cols || frows !== rows || heat.length !== gridN) reset();
-      // sim runs in fixed sub-steps so speed scales heat propagation, not fps.
+      if (!heat || fcols !== cols || frows !== rows || heat.length !== gridN ||
+          !base || base.length !== cols) reset();
+      ft += dt * (0.6 + state.speed * 1.4);
+      // sim runs in fixed sub-steps so speed scales propagation, not fps.
       var steps = 1 + (state.speed * 1.5 | 0); if (steps > 4) steps = 4;
-      // cooling is scaled by grid height so flames climb a fair fraction of the
-      // screen regardless of how many rows there are (taller grids -> gentler
-      // per-row cooling so the fire still reaches well up).
-      var coolMax = Math.min(0.10, 5.0 / rows);
+      // base per-row cooling — bigger than before so tongues actually taper and
+      // break apart; scaled by height so the fire still climbs tall grids.
+      var coolMax = Math.min(0.13, 5.6 / rows);
+      var cw = cols > 1 ? cols : 1;
+
+      // --- update the wandering source: 2-3 roaming hot spots + flicker ---
+      // hot-spot centres drift across the width on slow sines (no allocation).
+      var h1 = (0.5 + 0.45 * Math.sin(ft * 0.43 + 0.0)) * cw;
+      var h2 = (0.5 + 0.45 * Math.sin(ft * 0.31 + 2.1)) * cw;
+      var h3 = (0.5 + 0.45 * Math.sin(ft * 0.27 + 4.7)) * cw;
+      var spread = cw * 0.13 + 2;        // hot-spot half-width
+      for (var sx = 0; sx < cols; sx++) {
+        // distance falloff to each wandering hot spot -> roaring columns
+        var d1 = (sx - h1) / spread, d2 = (sx - h2) / spread, d3 = (sx - h3) / spread;
+        var hot = Math.exp(-d1*d1) + 0.85 * Math.exp(-d2*d2) + 0.7 * Math.exp(-d3*d3);
+        if (hot > 1) hot = 1;
+        // floor so the whole base still smoulders, hot spots push toward max
+        var target = 0.38 + 0.62 * hot;
+        // strong per-column flicker each step
+        target *= 0.7 + rng() * 0.5; if (target > 1) target = 1;
+        // smooth toward the target so columns breathe instead of strobing
+        base[sx] += (target - base[sx]) * 0.55;
+      }
+      // wind direction slowly reverses -> tongues lean left, then right
+      var wind = Math.sin(ft * 0.37) * 1.6;   // fractional bias in cells
+
       for (var s = 0; s < steps; s++) {
-        // bottom three rows = the hot source (flickering, always near max)
-        for (var br = 0; br < 3; br++) {
+        // bottom two rows = the hot source (flickering per column, near max)
+        for (var br = 0; br < 2; br++) {
           var ry = rows - 1 - br;
           if (ry < 0) break;
-          for (var x = 0; x < cols; x++) {
-            heat[ry*cols+x] = 0.85 + rng() * 0.15;
+          var fade = br === 0 ? 1.0 : 0.92;
+          for (var bx = 0; bx < cols; bx++) {
+            heat[ry*cols+bx] = base[bx] * fade;
           }
         }
-        // propagate upward: each cell <- below minus cooling, with wind drift
-        for (var y = 0; y < rows - 1; y++) {
+        // propagate upward: each cell <- a windswept sample below minus a
+        // random cooling. The integer wind part + a random jitter give the
+        // licking sideways drift; the larger random cooling carves dark gaps.
+        for (var y = 0; y < rows - 2; y++) {
+          var rowAbove = y * cols, rowBelow = (y + 1) * cols;
+          // slightly more cooling higher up -> fire thins as it rises
+          var hfrac = 1 - (y / rows);                  // 1 at bottom, ->0 top
+          var rowCool = coolMax * (1.05 - hfrac * 0.6);
           for (var xx = 0; xx < cols; xx++) {
-            var wind = (rng() * 3 | 0) - 1;        // -1,0,1 sideways
-            var src = xx + wind; if (src < 0) src = 0; else if (src >= cols) src = cols - 1;
-            var below = heat[(y+1)*cols+src];
-            var cool = rng() * coolMax;
-            var v = below - cool;
-            heat[y*cols+xx] = v < 0 ? 0 : v;
+            var jitter = (rng() * 3 | 0) - 1;            // -1,0,1
+            var off = wind + jitter;
+            var src2 = xx + (off < 0 ? (off - 0.5 | 0) : (off + 0.5 | 0));
+            if (src2 < 0) src2 = 0; else if (src2 >= cols) src2 = cols - 1;
+            var below = heat[rowBelow + src2];
+            var v = below - rng() * rowCool;
+            heat[rowAbove + xx] = v < 0 ? 0 : v;
           }
         }
       }
-      // pointer ember: inject heat near the cursor
+      // pointer ember: inject a blob of heat near the cursor
       if (pointer.active && pointer.gx >= 0 && pointer.gx < cols && pointer.gy >= 0 && pointer.gy < rows) {
-        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
           var px = pointer.gx + dx, py = pointer.gy + dy;
-          if (px >= 0 && px < cols && py >= 0 && py < rows) heat[py*cols+px] = 1;
+          if (px >= 0 && px < cols && py >= 0 && py < rows) {
+            var fall = 1 - (Math.abs(dx) + Math.abs(dy)) * 0.18;
+            if (fall > 0) { var pi = py*cols+px; if (fall > heat[pi]) heat[pi] = fall; }
+          }
         }
       }
+      // glyph density tracks heat: leave 0 (ramp-derived) where it's hot/dense;
+      // up top, where heat is faint, punch in sparse flickering spark glyphs and
+      // blank the dimmest cells so the top reads as broken embers, not a wash.
       glyph.fill(0);
-      lum.set(heat);
+      var topZone = (rows * 0.62) | 0;
+      for (var gy = 0; gy < topZone; gy++) {
+        var gr = gy * cols;
+        for (var gx = 0; gx < cols; gx++) {
+          var hv = heat[gr + gx];
+          if (hv < 0.10) { lum[gr + gx] = 0; continue; } // dark gap / no spark
+          // probabilistic spark: rarer the higher/cooler it gets
+          if (hv < 0.42 && rng() < 0.5) {
+            glyph[gr + gx] = SPARKS[(rng() * SPARKS.length) | 0];
+          }
+        }
+      }
+      // hot lower portion: copy heat straight to lum (ramp picks the char)
+      for (var li = topZone * cols; li < gridN; li++) lum[li] = heat[li];
+      // and the top portion lum where we didn't already zero it
+      for (var ty = 0; ty < topZone; ty++) {
+        var tr = ty * cols;
+        for (var tx = 0; tx < cols; tx++) {
+          var ti = tr + tx;
+          if (heat[ti] >= 0.10) lum[ti] = heat[ti];
+        }
+      }
     }
     function settle() {
       reset();
-      for (var i = 0; i < 60; i++) render(1/30);
+      for (var i = 0; i < 80; i++) render(1/30);
     }
     return { reset: reset, render: render, settle: settle };
   })();
@@ -1534,53 +1617,156 @@
      ==================================================================== */
   var Flow = (function () {
     var t = 0;
+    // PERSISTENT dye field — the source of truth that gets ADVECTED each frame by
+    // a curl-noise velocity field (semi-Lagrangian backtrace). This is what makes
+    // structures genuinely TRAVEL along streamlines instead of per-cell sparkle:
+    // dye[idx] holds intensity that we transport, decay, and re-inject from a slow
+    // moving noise source. dyeB is the double-buffer destination. Sized to the
+    // grid and reused — NO per-frame allocation.
+    var dye = null, dyeB = null, capN = 0;
+    function ensure() {
+      if (capN < gridN) {
+        dye = new Float32Array(gridN);
+        dyeB = new Float32Array(gridN);
+        capN = gridN;
+      }
+    }
     function setTime(v) { t = v; }
-    // cheap value-noise via summed sines (no allocation, smooth + tileable-ish)
+    // smooth value noise (hash lattice + quintic smoothstep) — gives organic,
+    // continuous fields with no axis-aligned sine artefacts.
+    function hash2(ix, iy) {
+      var h = (ix * 374761393 + iy * 668265263) ^ ((state.seed | 0) * 2246822519);
+      h = (h ^ (h >>> 13)) * 1274126177;
+      h = (h ^ (h >>> 16)) >>> 0;
+      return h / 4294967296;            // 0..1
+    }
+    function vnoise(x, y) {
+      var ix = Math.floor(x), iy = Math.floor(y);
+      var fx = x - ix, fy = y - iy;
+      var ux = fx * fx * fx * (fx * (fx * 6 - 15) + 10);   // quintic smootherstep
+      var uy = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+      var a = hash2(ix, iy), b = hash2(ix + 1, iy);
+      var c = hash2(ix, iy + 1), d = hash2(ix + 1, iy + 1);
+      var ab = a + (b - a) * ux, cd = c + (d - c) * ux;
+      return ab + (cd - ab) * uy;       // 0..1
+    }
+    // fractal noise (a few octaves) -> the streamfunction whose curl is the flow.
     function fbm(x, y) {
       var v = 0, amp = 0.5, fx = x, fy = y;
       for (var o = 0; o < 3; o++) {
-        v += amp * (Math.sin(fx) * Math.cos(fy * 0.9) + Math.sin((fx + fy) * 0.6));
-        fx = fx * 2.02 + 1.7; fy = fy * 2.02 - 1.3; amp *= 0.5;
+        v += amp * vnoise(fx, fy);
+        fx = fx * 2.03 + 17.1; fy = fy * 2.03 - 9.3; amp *= 0.5;
       }
-      return v;
+      return v;                          // ~0..0.875
     }
     function render(dt) {
-      t += dt;
+      ensure();
       glyph.fill(0);
-      var ph = t + (state.seed | 0) * 0.137;
-      // advection direction slowly rotates -> the whole field drifts as a current
-      var ang = ph * 0.15;
-      var dirx = Math.cos(ang), diry = Math.sin(ang);
-      var sc = 0.09;                       // spatial frequency
-      var drift = ph * 0.9;                // how far the current has travelled
+      if (dt < 0) dt = 0; else if (dt > 0.1) dt = 0.1;   // clamp for stability
+      t += dt;
+      var ph = t;
+      // ---- velocity field = CURL of a slowly-evolving streamfunction fbm ----
+      // v = (dPsi/dy, -dPsi/dx) is divergence-free, so it reads as incompressible
+      // swirling liquid. The streamfunction itself drifts over time (the +ph term
+      // animates the eddies) and we add a gentle base current so the whole field
+      // travels with clear directionality.
+      var sc = 0.045;                    // spatial frequency of the eddies
+      var eps = 0.9;                     // finite-difference step (lattice units)
+      var swirl = 4.2;                   // curl velocity strength (cells/sec-ish)
+      var baseAng = Math.sin(ph * 0.07) * 0.6 + 0.4;     // slowly steering current
+      var baseU = Math.cos(baseAng) * 1.7, baseV = Math.sin(baseAng) * 1.7;
       var pgx = pointer.active ? pointer.gx : -999;
       var pgy = pointer.active ? pointer.gy : -999;
+      var dtAdv = dt > 0 ? dt : 0.016;
+
       var idx = 0;
       for (var y = 0; y < rows; y++) {
         for (var x = 0; x < cols; x++, idx++) {
-          // sample point advected along the flow direction
-          var sx = x * sc - dirx * drift;
-          var sy = y * sc - diry * drift;
-          // domain warp: offset the sample by another fbm (ropey filaments)
-          var wx = fbm(sx + 1.3, sy - 0.7);
-          var wy = fbm(sx - 2.1, sy + 3.4);
-          var v = fbm(sx + wx * 0.8 + drift * 0.2, sy + wy * 0.8);
-          // pointer attractor: bend the stream toward/around the cursor
+          var nx = x * sc, ny = y * sc;
+          var tz = ph * 0.18;            // animate the streamfunction (eddies live)
+          // curl via central differences of the streamfunction psi
+          var p_yp = fbm(nx, ny + sc * eps + tz);
+          var p_ym = fbm(nx, ny - sc * eps + tz);
+          var p_xp = fbm(nx + sc * eps, ny + tz);
+          var p_xm = fbm(nx - sc * eps, ny + tz);
+          var u = (p_yp - p_ym) * swirl / (2 * sc * eps) + baseU;
+          var v = -(p_xp - p_xm) * swirl / (2 * sc * eps) + baseV;
+          // pointer injects a swirling vortex (curl of a gaussian bump)
           if (pgx > -900) {
             var ddx = x - pgx, ddy = y - pgy;
-            var rr = Math.sqrt(ddx*ddx + ddy*ddy);
-            v += Math.sin(rr * 0.4 - ph * 2.0) * Math.exp(-rr * 0.045) * 1.6;
+            var rr2 = ddx*ddx + ddy*ddy;
+            var g = Math.exp(-rr2 * 0.006) * 9.0;
+            u += -ddy * g * 0.06;
+            v +=  ddx * g * 0.06;
           }
-          // ridge transform -> bright filaments on the flow lines
-          var n = (v + 2.2) / 4.4;          // ~0..1
-          if (n < 0) n = 0; else if (n > 1) n = 1;
-          n = 1 - Math.abs(n - 0.5) * 2;    // ridge: peak at the mid-band
-          lum[idx] = n * n;
+          // ---- semi-Lagrangian backtrace: where did this cell's dye come from? ----
+          var bx = x - u * dtAdv;
+          var by = y - v * dtAdv;
+          // bilinear sample of the previous dye field at the backtraced point
+          if (bx < 0) bx = 0; else if (bx > cols - 1.001) bx = cols - 1.001;
+          if (by < 0) by = 0; else if (by > rows - 1.001) by = rows - 1.001;
+          var bix = bx | 0, biy = by | 0;
+          var ffx = bx - bix, ffy = by - biy;
+          var o0 = biy * cols + bix;
+          var s00 = dye[o0], s10 = dye[o0 + 1];
+          var s01 = dye[o0 + cols], s11 = dye[o0 + cols + 1];
+          var top = s00 + (s10 - s00) * ffx;
+          var bot = s01 + (s11 - s01) * ffx;
+          var adv = top + (bot - top) * ffy;
+          // ---- re-inject dye from a slow upstream noise source ----
+          // ropey filaments: ridge of a warped fbm, advected with the current so
+          // the source structures themselves drift (continuous travelling ropes).
+          var qx = nx * 1.7 - baseU * ph * 0.16, qy = ny * 1.7 - baseV * ph * 0.16;
+          var wox = fbm(qx + 5.2 + tz, qy - 1.7);
+          var woy = fbm(qx - 3.1, qy + 4.4 - tz);
+          var src = fbm(qx + wox * 2.4, qy + woy * 2.4);   // 0..~0.875
+          var rg = src * 1.143;                            // -> ~0..1
+          rg = 1 - Math.abs(rg - 0.5) * 2;                 // ridge -> filaments
+          if (rg < 0) rg = 0;
+          rg = rg * rg * (1.6 - 0.6 * rg);                 // thin, sharp ropes
+          // new value = mostly the advected dye (so it travels + stays continuous),
+          // refreshed toward the source ridge so the ropes keep regenerating.
+          var nv = adv * 0.88 + rg * 0.22;
+          if (nv > 1.0) nv = 1.0;
+          dyeB[idx] = nv;
         }
       }
+      // pointer dumps a bright blob of dye so you can paint into the current
+      if (pgx > -900) {
+        var px0 = pgx | 0, py0 = pgy | 0;
+        for (var oy = -2; oy <= 2; oy++) {
+          var yy = py0 + oy; if (yy < 0 || yy >= rows) continue;
+          for (var ox = -2; ox <= 2; ox++) {
+            var xx = px0 + ox; if (xx < 0 || xx >= cols) continue;
+            var k = yy * cols + xx;
+            var add = Math.exp(-(ox*ox + oy*oy) * 0.35) * 0.9;
+            var nvv = dyeB[k] + add; if (nvv > 1.25) nvv = 1.25;
+            dyeB[k] = nvv;
+          }
+        }
+      }
+      // swap buffers + publish to lum with a gentle S-curve so the ropey cores
+      // pop bright and the troughs go dark (filaments read as distinct currents).
+      var tmp = dye; dye = dyeB; dyeB = tmp;
+      for (var i = 0; i < gridN; i++) {
+        var d = dye[i];
+        if (d > 1) d = 1; else if (d < 0) d = 0;
+        // smoothstep-ish contrast: lift cores, deepen gaps
+        var s = d * d * (3 - 2 * d);
+        lum[i] = d * 0.35 + s * 0.65;
+      }
     }
-    function settle() { setTime(4.0); render(0); }
-    return { render: render, setTime: setTime, settle: settle };
+    // SETTLE / RESET — develop the field from a seeded source so the static
+    // (reduced-motion) frame already shows formed filaments, then it self-sustains.
+    function prime(frames) {
+      ensure();
+      dye.fill(0); dyeB.fill(0);
+      t = 0;
+      for (var f = 0; f < frames; f++) render(0.05);
+    }
+    function reset() { prime(40); }
+    function settle() { prime(60); }
+    return { render: render, setTime: setTime, settle: settle, reset: reset };
   })();
 
   /* ====================================================================
@@ -1670,40 +1856,80 @@
      Pointer moves the centre.
      ==================================================================== */
   var Tunnel = (function () {
+    // Classic demoscene texture-mapped tunnel. Per cell we take its angle +
+    // radius from a (wobbling, pointer-driven) centre and map to texture coords:
+    //   u = angle / 2π   (wraps around the wall)
+    //   v = SCALE / radius  (texture COMPRESSES toward the centre => depth)
+    // We scroll v inward over time (rush INTO the pipe) and slowly rotate u so
+    // the whole wall spins. The wall texture is clean concentric RINGS × angular
+    // STRIPES built from smooth (cos) functions with strong contrast — mapped to
+    // lum so the ramp anti-aliases it. Depth shading brightens the rim and fades
+    // to a small DARK THROAT at the vanishing point. A gentle wobble + rotation
+    // give it hypnosis.
     var t = 0;
     var aspect = 0.5;
     function setTime(v) { t = v; }
     function render(dt) {
-      t += dt * (0.6 + state.speed * 0.8);
+      t += dt * (0.55 + state.speed * 0.85);
       glyph.fill(0);
-      var cx = cols * 0.5, cy = rows * 0.5;
+      var sp = (state.seed | 0) * 0.13;
+      // centre: screen centre, gently wobbling (Lissajous) for hypnosis, or the
+      // pointer when it's active over the stage.
+      var cx = cols * 0.5 + Math.cos(t * 0.42 + sp) * (cols * 0.07);
+      var cy = rows * 0.5 + Math.sin(t * 0.55 + sp * 1.7) * (rows * 0.07);
       if (pointer.active && pointer.gx >= 0) { cx = pointer.gx; cy = pointer.gy; }
-      var sp = (state.seed | 0) * 0.07;
-      var maxR = Math.min(cols, rows / aspect) * 0.5;
+      // normalize radius against half the short side so geometry is resolution
+      // independent (rim brightness lands the same on any grid).
+      var half = Math.min(cols, rows / aspect) * 0.5;
+      var inv2pi = 1 / (2 * Math.PI);
+      // texture parameters
+      var SCALE = 2.6 * half;           // v = SCALE/radius : bigger => rings bunch
+                                        // up tightly toward the throat (perspective)
+      var vScroll = t * 1.6;            // rush INWARD over time
+      var uRot = t * 0.18 + sp;         // slow wall rotation
+      var RINGS = 6.0;                  // concentric ring frequency along depth
+      var STRIPES = 22.0;               // angular stripe count around the wall
+      var TWO_PI = Math.PI * 2;
       var idx = 0;
       for (var y = 0; y < rows; y++) {
+        var dyBase = (y - cy) / aspect;   // correct cell aspect so rings are round
         for (var x = 0; x < cols; x++, idx++) {
           var dx = (x - cx);
-          var dy = (y - cy) / aspect;       // correct cell aspect so rings are round
+          var dy = dyBase;
           var r = Math.sqrt(dx*dx + dy*dy) + 0.0001;
           var ang = Math.atan2(dy, dx);
-          // tunnel texture coords: depth = k/r rushes inward as t grows; angle
-          // wraps the wall into stripes. The +t scroll makes rings race to centre.
-          var depth = 14.0 / r + t * 3.0 + sp;
-          var u = ang * (10 / Math.PI);       // 20 angular stripes around the wall
-          // sharp concentric rings (raised sine -> crisp light bands)
-          var ringS = Math.sin(depth);
-          var rings = Math.pow(0.5 + 0.5 * ringS, 1.6);
-          var stripeS = Math.sin(u + depth * 0.4);
-          var stripes = 0.5 + 0.5 * stripeS;
-          var tex = rings * (0.55 + 0.45 * stripes);
-          // radial brightness: bright wall near the rim, fading to a DARK throat
-          // at the centre (the vanishing point) so the tunnel reads as 3D depth.
-          var fade = r / maxR; if (fade > 1) fade = 1;
-          var throat = fade * fade * (3 - 2 * fade); // smoothstep 0(centre)->1(rim)
-          var v = tex * (0.06 + 0.94 * throat);
-          if (v < 0) v = 0; else if (v > 1) v = 1;
-          lum[idx] = v;
+
+          // texture coords (the classic mapping)
+          var u = ang * inv2pi + uRot;          // around the wall (0..1 wraps)
+          var v = SCALE / r + vScroll;          // INTO the wall (rushes to centre)
+
+          // RINGS along depth — smooth cosine bands, contrast-boosted so the
+          // bright bands are crisp but the ramp still anti-aliases the edges.
+          var ring = 0.5 + 0.5 * Math.cos(v * RINGS * TWO_PI * 0.159155);
+          ring = ring * ring;                   // sharpen toward bright bands
+          // STRIPES around the wall — corkscrew with depth (v term) so the wall
+          // texture clearly rushes past, not just rings pulsing.
+          var stripe = 0.5 + 0.5 * Math.cos((u * STRIPES + v * 0.9) * TWO_PI);
+          stripe = stripe * stripe;             // sharpen the bright stripes
+          // combine: rings × stripes give the checkered demoscene wall. Keep a
+          // healthy floor so the wall is never near-black between bands.
+          var tex = (0.32 + 0.68 * ring) * (0.46 + 0.54 * stripe);
+
+          // DEPTH SHADING: bright at the rim, fading toward the centre. Use the
+          // texture coord depth itself (1/r) so distant wall (small r, near the
+          // throat) genuinely darkens to a small vanishing point — not a giant
+          // black hole. fog = how close to the rim (0 centre -> 1 rim).
+          var fog = r / half; if (fog > 1) fog = 1;
+          // smoothstep gives a soft rim->throat ramp; keep a small lit floor so
+          // the throat is a dark point, not a dead void, and the whole field
+          // reads bright.
+          var shade = fog * fog * (3 - 2 * fog);
+          var lumV = tex * (0.16 + 0.84 * shade);
+          // lift the overall level so the field is much brighter/clearer than
+          // the old faint version.
+          lumV = 0.08 + lumV * 1.02;
+          if (lumV < 0) lumV = 0; else if (lumV > 1) lumV = 1;
+          lum[idx] = lumV;
         }
       }
     }
