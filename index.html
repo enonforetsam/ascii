@@ -2933,6 +2933,16 @@
     return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
            p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
   }
+
+  // a short, pretty, NUMBER-FREE tag so repeated downloads stay unique while the
+  // filename stays beautiful (…-velvet.txt instead of an ugly …-20260626-015700)
+  var NICE_WORDS = ['ember','lunar','velvet','drift','halcyon','cobalt','quartz',
+    'vapor','prism','aurora','dusk','comet','nebula','zephyr','cinder','glacier',
+    'marble','opal','slate','onyx','ivory','saffron','indigo','crimson','viridian',
+    'halo','echo','pulse','bloom','flux','haze','frost','signal','relay','cascade',
+    'lattice','phantom','mirage','solstice','eclipse','meridian','tide','willow',
+    'cedar','fathom','cipher','helix','nova','quasar','lumen','photon','chroma'];
+  function prettyTag() { return NICE_WORDS[(Math.random() * NICE_WORDS.length) | 0]; }
   // descriptive, unique, filesystem-safe download name based on what's on screen
   // e.g. ascii-tunnel-neon-20260626-143205.txt / ascii-words-mybitduit-3d-ryb-….png
   function fname(ext) {
@@ -2950,7 +2960,7 @@
       parts.push(state.engine, state.colour);
     }
     if (state.bg === 'creme') parts.push('creme');
-    parts.push(stamp());
+    parts.push(prettyTag());
     return parts.join('-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '') + '.' + ext;
   }
 
