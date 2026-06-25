@@ -215,13 +215,16 @@
     appearance:none;
     -webkit-appearance:none;
     font-family:var(--mono);
-    font-size:11px;
-    letter-spacing:.06em;
+    font-size:10px;
+    letter-spacing:0;
     color:#ececef;
     width:100%;
     min-height:34px;
     min-width:32px;
-    padding:0 8px;
+    padding:0 6px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:clip;
     cursor:pointer;
     text-shadow:none;
     border-radius:8px;
@@ -246,18 +249,18 @@
       inset 0 1px 3px rgba(0,0,0,.6),
       0 1px 1px rgba(0,0,0,.4);
   }
-  /* selected — Fluid's .fieldBtn.on: an accent ring on a brighter metallic face */
+  /* selected — the clicked tile fills WHITE with dark text (pops against the
+     dark gunmetal tiles) */
   .tab[aria-pressed="true"]{
-    color:#ffffff;
-    background-image:linear-gradient(180deg, #24262f 0%, #181922 55%, #0e0f15 100%);
-    border-color:var(--accent);
+    color:#0b0b0c;
+    background-image:linear-gradient(180deg, #ffffff 0%, #f2f2f3 60%, #e4e4e6 100%);
+    border-color:rgba(0,0,0,.28);
     box-shadow:
-      inset 0 0 0 1px var(--accent),
-      inset 0 1px 0 rgba(255,255,255,.16),
-      0 2px 6px rgba(0,0,0,.5);
+      inset 0 1px 0 rgba(255,255,255,.95),
+      0 2px 6px rgba(0,0,0,.3);
   }
   .tab[aria-pressed="true"]:hover{
-    background-image:linear-gradient(180deg, #2a2c36 0%, #1c1d27 55%, #111219 100%);
+    background-image:linear-gradient(180deg, #ffffff 0%, #f6f6f7 60%, #eaeaec 100%);
   }
 
   /* uniform, always-visible focus ring */
@@ -554,7 +557,7 @@
 
     <div class="group">
       <span class="lab" id="lab-looks">Looks</span>
-      <div class="tabs seg looks" id="seg-looks" role="group" aria-labelledby="lab-looks">
+      <div class="tabs seg looks cols2" id="seg-looks" role="group" aria-labelledby="lab-looks">
         <button class="tab" data-look="Neo" type="button" aria-label="Neo look">Neo</button>
         <button class="tab" data-look="Solaris" type="button" aria-label="Solaris look">Solaris</button>
         <button class="tab" data-look="Blueprint" type="button" aria-label="Blueprint look">Blueprint</button>
