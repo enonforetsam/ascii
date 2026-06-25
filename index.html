@@ -103,12 +103,19 @@
     padding:16px 16px 14px;
     overflow-y:auto;
     overscroll-behavior:contain;
+    /* matt-black instrument chrome — a fixed neutral panel, decoupled from the
+       art theme: override the colour tokens locally so every control in the rail
+       resolves white-on-matt-black, while the stage/art keeps the active theme. */
+    --ink:#f5f5f6;
+    --ink-rgb:245,245,246;
+    --ink-dim:#9a9a9e;
+    --glow:none;
+    --ctl-glow:none;
+    --tab-bg-on:#f5f5f6;
+    color:var(--ink);
+    text-shadow:none;
     border-right:1px solid var(--ink-faint);
-    background:
-      linear-gradient(rgba(var(--ink-rgb),.03), rgba(var(--ink-rgb),.03)),
-      rgba(var(--bg-rgb),.78);
-    backdrop-filter:blur(3px);
-    -webkit-backdrop-filter:blur(3px);
+    background:#0b0b0c;
   }
   h1.wordmark{
     font-size:18px;
@@ -187,6 +194,8 @@
     border-color:var(--ink);
     box-shadow:var(--ctl-glow);
   }
+  /* in the matt-black rail a pressed chip fills white → use dark text for contrast */
+  .topbar .tab[aria-pressed="true"]{ color:#0b0b0c; }
 
   select{
     appearance:none;
