@@ -196,6 +196,8 @@
   }
   /* in the matt-black rail a pressed chip fills white → use dark text for contrast */
   .topbar .tab[aria-pressed="true"]{ color:#0b0b0c; }
+  /* crisp white outlines on the rail's boxes (chips / buttons / select) */
+  .topbar .tab, .topbar .btn, .topbar select{ border-color:var(--ink); }
 
   select{
     appearance:none;
