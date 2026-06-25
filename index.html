@@ -1439,15 +1439,23 @@
       }
       refresh();
     }
-    // VERTICAL DRAG: up = increase. Move/up are bound to the WINDOW for the
-    // duration of the drag (not the 46px knob), so the gesture tracks anywhere on
-    // screen — robust even when pointer capture is unavailable. Wheel also adjusts.
-    var dragging = false, startY = 0, startVal = 0;
-    var span = max - min;
+    // ANGULAR positioning (Fluid's model): the value follows the pointer's ANGLE
+    // about the knob centre, measured clockwise from 12 o'clock across the 270°
+    // sweep — click/drag anywhere around the dial and it turns straight to that
+    // angle (click a spot to jump to it). Move/up bind to the WINDOW so the drag
+    // tracks anywhere on screen; wheel adjusts too.
+    function setFromPoint(cx, cy) {
+      var r = knobEl.getBoundingClientRect();
+      var dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2);
+      if (!dx && !dy) return;
+      var deg = Math.atan2(dx, -dy) * 180 / Math.PI;   // 0 at top, clockwise positive
+      if (deg > 135) deg = 135; else if (deg < -135) deg = -135;
+      commit(min + ((deg - START) / SWEEP) * (max - min));
+    }
+    var dragging = false;
     function onMove(e) {
       if (!dragging) return;
-      var dy = startY - e.clientY;          // up is positive
-      commit(startVal + (dy / 160) * span); // ~160px of travel == full range
+      setFromPoint(e.clientX, e.clientY);
       e.preventDefault();
     }
     function onUp() {
@@ -1460,12 +1468,11 @@
     }
     knobEl.addEventListener('pointerdown', function (e) {
       dragging = true;
-      startY = e.clientY;
-      startVal = parseFloat(input.value);
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
       window.addEventListener('pointercancel', onUp);
       knobEl.focus();
+      setFromPoint(e.clientX, e.clientY);   // jump straight to the clicked angle
       e.preventDefault();
     });
     knobEl.addEventListener('wheel', function (e) {
