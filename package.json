@@ -8,5 +8,8 @@
     "deploy": "npx wrangler deploy",
     "deploy:staging": "npx wrangler deploy --env staging",
     "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "puppeteer-core": "^25.2.1"
   }
 }

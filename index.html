@@ -462,6 +462,12 @@
   #grp-words{ display:none; }
   body.mode-words #grp-words{ display:flex; }
 
+  /* PALETTE picker — only for words mode with the 3D block fill. Hidden in every
+     other mode/fill so there's no dead control. body.words-3d is set in
+     syncControls() when state.mode==='words' && state.wordFill==='3d'. */
+  #grp-wordpal{ display:none; }
+  body.words-3d #grp-wordpal{ display:flex; }
+
   /* In image mode the SPEED knob is gone — the knob row now holds CELL + CONTRAST.
      In words mode SPEED is only meaningful when the fill is an engine; body.words-
      static (solid fill) hides it too. Recentre to 2 columns when one dial is gone
@@ -469,6 +475,9 @@
   body.mode-image .knobgrid,
   body.mode-words.words-static .knobgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
   body.mode-words.words-static #knob-speed{ display:none; }
+  /* 3D blocks are also static (no animation) -> drop the SPEED knob too. */
+  body.mode-words.words-3d .knobgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.mode-words.words-3d #knob-speed{ display:none; }
 
   /* The ACTIONS group is shared (copy + share stay), but SHUFFLE is generative-
      only. The group's .tabs is a 3-col grid; with shuffle hidden in image/words
@@ -671,9 +680,23 @@
       <span class="lab" id="lab-word-fill" style="margin-top:4px">Fill</span>
       <div class="tabs cols2" id="seg-wordfill" role="group" aria-labelledby="lab-word-fill">
         <button class="tab" data-fill="solid" type="button" aria-pressed="true" aria-label="solid fill — flat letters">solid</button>
+        <button class="tab" data-fill="3d" type="button" aria-pressed="false" aria-label="3D fill — extruded block letters with a bevel">3D</button>
         <button class="tab" data-fill="matrix" type="button" aria-pressed="false" aria-label="matrix fill — falling glyphs inside the letters">matrix</button>
         <button class="tab" data-fill="plasma" type="button" aria-pressed="false" aria-label="plasma fill — plasma field inside the letters">plasma</button>
         <button class="tab" data-fill="donut" type="button" aria-pressed="false" aria-label="donut fill — spinning donut inside the letters">donut</button>
+      </div>
+    </div>
+
+    <!-- PALETTE — the per-cell colour scheme for the 3D block letters. Shown only
+         in words mode with the 3D fill (body.words-3d). Distributes colours across
+         the word as equal horizontal X-position bands; side bevels are darkened. -->
+    <div class="group" id="grp-wordpal">
+      <span class="lab" id="lab-wordpal">Palette</span>
+      <div class="tabs cols2" id="seg-wordpal" role="group" aria-labelledby="lab-wordpal">
+        <button class="tab" data-pal="mono" type="button" aria-pressed="true" aria-label="mono palette — the theme ink colour">mono</button>
+        <button class="tab" data-pal="ryb" type="button" aria-pressed="false" aria-label="RYB palette — red, yellow, blue bands">RYB</button>
+        <button class="tab" data-pal="rainbow" type="button" aria-pressed="false" aria-label="rainbow palette — a spread of hues">rainbow</button>
+        <button class="tab" data-pal="neon" type="button" aria-pressed="false" aria-label="neon palette — cyan, magenta, lime">neon</button>
       </div>
     </div>
 
@@ -829,6 +852,10 @@
     photo:    ' .\'`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
   };
 
+  // the solid full block — forced for every face + side cell of the 3D word
+  // render so it reads as chunky blocks regardless of the active ramp.
+  var BLOCK_CP = 0x2588; // '█'
+
   // matrix uses its own glyph set (katakana + latin + symbols), forced per cell
   var MATRIX_GLYPHS =
     'アイウエオカキクケコサシスセソ' +
@@ -854,7 +881,18 @@
     seed:    0,       // integer; feeds the seeded PRNG for reproducible variation
     invert:  false,   // image engine: invert the luminance->glyph mapping
     word:    'ASCII', // words mode: the text to render as ASCII
-    wordFill:'solid'  // words mode: 'solid' | 'matrix' | 'plasma' | 'donut'
+    wordFill:'solid', // words mode: 'solid' | '3d' | 'matrix' | 'plasma' | 'donut'
+    wordPal: 'mono'   // words 3d: colour palette 'mono'|'ryb'|'rainbow'|'neon'
+  };
+
+  // WORDS 3D palettes — ordered colour BANDS distributed across the word by
+  // X-position (band 0 owns the leftmost slice, etc). 'mono' is a sentinel that
+  // resolves to the active theme ink at render time (back-compat single ink).
+  var WORD_PALETTES = {
+    mono:    null,                                  // -> theme ink (per-cell off)
+    ryb:     [[226,59,59], [255,207,51], [59,123,226]],            // red/yellow/blue
+    rainbow: [[233,69,69],[247,148,41],[247,224,41],[74,201,96],[51,140,228],[150,84,214]],
+    neon:    [[44,232,228], [232,44,210], [156,247,46]]            // cyan/magenta/lime
   };
 
   // DEFAULTS — the canonical baseline. writeHash() trims any key equal to its
@@ -897,6 +935,12 @@
   var rectL = 0, rectT = 0, vw = 1, vh = 1;
   var lum = null;     // Float32Array, 0..1 intensity per cell
   var glyph = null;   // Uint32Array, forced code point per cell; 0 => derive from ramp
+  // per-cell colour buffer for the words-3d multi-colour render. Int32Array of
+  // packed 0xRRGGBB (>=0) per non-blank cell, or -1 to mean "use the theme ink"
+  // (the normal single-ink path). NON-NULL/active only while words-3d renders;
+  // cleared (colActive=false) for every other engine so the fast atlas path runs.
+  var cellCol = null; // Int32Array(gridN): packed RGB per cell, -1 = theme ink
+  var colActive = false; // is the per-cell colour path live this frame?
 
   var pointer = { x: -1, y: -1, gx: -1, gy: -1, active: false };
 
@@ -933,6 +977,9 @@
         (state.mode === 'words' && state.wordFill === 'matrix')) {
       for (var j = 0; j < MATRIX_GLYPHS.length; j++) add(MATRIX_GLYPHS.charCodeAt(j));
     }
+    // the 3D word fill forces the full block '█' for face + side cells — bake it
+    // so the mono (theme-ink) path can blit it from the atlas like any glyph.
+    if (state.mode === 'words' && state.wordFill === '3d') add(BLOCK_CP);
 
     atlasList = set;
     atlasMap = {};
@@ -981,6 +1028,7 @@
 
     lum = new Float32Array(gridN);
     glyph = new Uint32Array(gridN);
+    cellCol = new Int32Array(gridN);
 
     // reset per-engine state that depends on grid dims
     Matrix.reset();
@@ -1501,6 +1549,88 @@
       else lum.fill(0);
     }
 
+    // 3D BLOCK letters: extruded, multi-colour, STATIC.
+    //  - FACE  cells = where the mask is set (coverage >= a threshold) -> bright
+    //    full block, drawn on top.
+    //  - SIDE  cells = reachable by offsetting a face cell by 1..D in the down-
+    //    right extrude direction (+1col,+1row per step) and NOT themselves a face
+    //    -> a DARKER block (the bevel that makes it read 3D).
+    //  Forces the full-block glyph '█' for both, and writes a per-cell colour
+    //  (cellCol) by X-position bands from the active palette ('mono' -> theme ink,
+    //  per-cell off). Depth D auto-scales to the letter height.
+    function render3d() {
+      ensure();
+      lum.fill(0);
+      glyph.fill(0);
+      if (cellCol) cellCol.fill(-1);
+      colActive = false;
+      if (!mask || mask.length !== gridN) return;
+
+      // FACE set from the mask (anti-aliased edges -> a firm 0.5 threshold so the
+      // blocks have crisp chunky edges, not a soft halo).
+      var FT = 0.5;
+      var face = new Uint8Array(gridN);
+      var minX = cols, maxX = -1, minY = rows, maxY = -1;
+      for (var i = 0; i < gridN; i++) {
+        if (mask[i] >= FT) {
+          face[i] = 1;
+          var fx = i % cols, fy = (i / cols) | 0;
+          if (fx < minX) minX = fx; if (fx > maxX) maxX = fx;
+          if (fy < minY) minY = fy; if (fy > maxY) maxY = fy;
+        }
+      }
+      if (maxX < 0) return;   // empty word
+
+      // DEPTH auto-scales to the letter height: ~14% of the glyph height, a few
+      // cells, clamped so it stays a readable bevel (not a smear).
+      var letterH = (maxY - minY + 1);
+      var D = Math.max(2, Math.round(letterH * 0.18));
+      if (D > 7) D = 7;
+
+      // palette + band geometry (bands span the word's X extent).
+      var pal = WORD_PALETTES[state.wordPal] || null;
+      var ink = COLOURS[state.colour].ink;
+      var wSpan = Math.max(1, maxX - minX + 1);
+      var nBands = pal ? pal.length : 1;
+      function bandRGB(gx) {
+        if (!pal) return ink;                  // mono -> theme ink
+        var bi = (((gx - minX) / wSpan) * nBands) | 0;
+        if (bi < 0) bi = 0; if (bi >= nBands) bi = nBands - 1;
+        return pal[bi];
+      }
+      function pack(rgb) { return ((rgb[0] & 255) << 16) | ((rgb[1] & 255) << 8) | (rgb[2] & 255); }
+
+      // SIDE pass first (face draws over it). For each face cell, walk 1..D in the
+      // down-right direction; any in-bounds non-face cell becomes a side block,
+      // coloured by ITS OWN x-band, darkened ~0.55.
+      for (var fi = 0; fi < gridN; fi++) {
+        if (!face[fi]) continue;
+        var cx = fi % cols, cy = (fi / cols) | 0;
+        for (var d = 1; d <= D; d++) {
+          var sx = cx + d, sy = cy + d;
+          if (sx >= cols || sy >= rows) break;
+          var si = sy * cols + sx;
+          if (face[si]) continue;             // a face owns this -> skip
+          if (lum[si] > 0.001) continue;      // already a nearer side block
+          lum[si] = 0.55;
+          glyph[si] = BLOCK_CP;
+          if (pal) {
+            var srgb = bandRGB(sx);
+            cellCol[si] = pack([ (srgb[0]*0.55)|0, (srgb[1]*0.55)|0, (srgb[2]*0.55)|0 ]);
+          }
+        }
+      }
+      // FACE pass — bright block on top, full band colour.
+      for (var pf = 0; pf < gridN; pf++) {
+        if (!face[pf]) continue;
+        lum[pf] = 1.0;
+        glyph[pf] = BLOCK_CP;
+        if (pal) cellCol[pf] = pack(bandRGB(pf % cols));
+      }
+      // engage the per-cell colour path only for a real (non-mono) palette.
+      colActive = !!pal;
+    }
+
     // Engine fill: run the chosen engine into lum[], then cut to the mask.
     function renderFill(dt, fill, tiltX, tiltY) {
       if (fill === 'matrix')      Matrix.render(dt);
@@ -1513,7 +1643,7 @@
 
     return {
       invalidate: invalidate, renderSolid: renderSolid, renderFill: renderFill,
-      applyMask: applyMask, getMask: getMask
+      render3d: render3d, applyMask: applyMask, getMask: getMask
     };
   })();
 
@@ -1537,6 +1667,14 @@
     var gamma = state.contrast;
     var cpw = Math.max(1, cw * dpr);
     var cph = Math.max(1, ch * dpr);
+
+    // PER-CELL COLOUR PATH — words-3d with a real palette. Each non-blank cell
+    // owns a colour in cellCol (packed RGB); draw its glyph directly with
+    // fillText in that colour. The render is STATIC, so per-cell fills are cheap.
+    if (colActive && cellCol) {
+      paintPerCell(ramp, rampLen, gamma, cpw, cph);
+      return;
+    }
 
     ctx.globalAlpha = 1;
     var prevAlpha = -1;
@@ -1577,6 +1715,47 @@
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  // PER-CELL colour renderer (words-3d). Draws each non-blank cell's glyph in its
+  // OWN colour from cellCol (packed 0xRRGGBB) with crisp solid blocks. Falls back
+  // to the theme ink for any cell left at -1 (e.g. mono cells that slipped here).
+  function paintPerCell(ramp, rampLen, gamma, cpw, cph) {
+    var ink = COLOURS[state.colour].ink;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.font = '700 ' + Math.round(ch * dpr * 0.96) + 'px ' +
+      'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+    ctx.globalAlpha = 1;
+    var halfW = cpw / 2, halfH = cph / 2;
+    var i = 0;
+    for (var y = 0; y < rows; y++) {
+      var cyp = y * cph + halfH + cph * 0.02;
+      for (var x = 0; x < cols; x++, i++) {
+        var v = lum[i];
+        if (v <= 0.001) continue;
+        if (gamma !== 1) v = Math.pow(v, 1 / gamma);
+        if (v <= 0.004) continue;
+        var cp = glyph[i];
+        if (cp === 0) {
+          var ri = (v * (rampLen - 1) + 0.5) | 0;
+          if (ri < 1) continue;
+          if (ri > rampLen - 1) ri = rampLen - 1;
+          cp = ramp.charCodeAt(ri);
+          if (cp === 32) continue;
+        }
+        var packed = cellCol[i];
+        if (packed >= 0) {
+          ctx.fillStyle = 'rgb(' + ((packed >> 16) & 255) + ',' +
+            ((packed >> 8) & 255) + ',' + (packed & 255) + ')';
+        } else {
+          // theme ink, scaled by brightness so it matches the atlas path's feel
+          var b = v;
+          ctx.fillStyle = 'rgb(' + ((ink[0]*b)|0) + ',' + ((ink[1]*b)|0) + ',' + ((ink[2]*b)|0) + ')';
+        }
+        ctx.fillText(String.fromCodePoint(cp), x * cpw + halfW, cyp);
+      }
+    }
   }
 
   /* ====================================================================
@@ -1633,8 +1812,16 @@
           if (ri < 0) ri = 0; if (ri > rampLen - 1) ri = rampLen - 1;
           chr = ramp.charAt(ri);
         }
-        var b = 0.35 + 0.65 * v;
-        var r = Math.round(ink[0] * b), g = Math.round(ink[1] * b), bl = Math.round(ink[2] * b);
+        var r, g, bl;
+        // words-3d per-cell colour: emit the cell's OWN truecolour so the coloured
+        // 3D blocks survive into a terminal (face = full, side = pre-darkened).
+        if (colActive && cellCol && cellCol[idx] >= 0) {
+          var pk = cellCol[idx];
+          r = (pk >> 16) & 255; g = (pk >> 8) & 255; bl = pk & 255;
+        } else {
+          var b = 0.35 + 0.65 * v;
+          r = Math.round(ink[0] * b); g = Math.round(ink[1] * b); bl = Math.round(ink[2] * b);
+        }
         line += '\x1b[38;2;' + r + ';' + g + ';' + bl + 'm' + chr;
       }
       out += line + '\x1b[0m\n';
@@ -1778,8 +1965,10 @@
       tiltY = Math.max(-1, Math.min(1, (pointer.y / vh) * 2 - 1));
     }
     var sp = state.speed;
+    colActive = false;   // default: single-ink atlas path (words-3d re-enables it)
     if (state.mode === 'words') {
       if (state.wordFill === 'solid') Words.renderSolid();
+      else if (state.wordFill === '3d') Words.render3d();
       else Words.renderFill(dt * sp, state.wordFill, tiltX, tiltY);
     }
     else if (state.mode === 'image')   Image_.render(dt);
@@ -1803,11 +1992,14 @@
   // and plasma is advanced to a developed (non-faint) phase.
   function renderStaticFrame() {
     var tiltX = 0, tiltY = 0; // ignore pointer for a deterministic frame
+    colActive = false;
     if (state.mode === 'words') {
       // reduced-motion words: solid is naturally static; an engine-fill renders
       // ONE settled static frame (developed phase) then cuts to the letter mask.
       if (state.wordFill === 'solid') {
         Words.renderSolid();
+      } else if (state.wordFill === '3d') {
+        Words.render3d();
       } else if (state.wordFill === 'matrix') {
         Matrix.reset(); Matrix.render(0.4); Words.applyMask();
       } else if (state.wordFill === 'donut') {
@@ -1888,7 +2080,8 @@
       else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
       else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
       else if (k === 'w') { try { state.word = decodeURIComponent(val || ''); } catch (e) { state.word = val || ''; } wordFromHash = true; }
-      else if (k === 'wf') { if (val === 'solid' || val === 'matrix' || val === 'plasma' || val === 'donut') state.wordFill = val; }
+      else if (k === 'wf') { if (val === 'solid' || val === '3d' || val === 'matrix' || val === 'plasma' || val === 'donut') state.wordFill = val; }
+      else if (k === 'wp') { if (WORD_PALETTES.hasOwnProperty(val)) state.wordPal = val; }
     }
     // top-level MODE: an explicit word pins WORDS mode; else image render => image;
     // else generative. (back-compat: old #e=image links still resolve to image.)
@@ -1927,6 +2120,8 @@
     if (state.mode === 'words') {
       out.push('w=' + encodeURIComponent(state.word == null ? '' : state.word));
       if (state.wordFill !== 'solid') out.push('wf=' + state.wordFill);
+      // palette only matters for the 3d fill; trim the default 'mono'.
+      if (state.wordFill === '3d' && state.wordPal !== 'mono') out.push('wp=' + state.wordPal);
     }
     return out.length ? '#' + out.join('&') : '#';
   }
@@ -1947,6 +2142,7 @@
   var modeImg    = document.getElementById('mode-img');
   var modeWords  = document.getElementById('mode-words');
   var segWordFill= document.getElementById('seg-wordfill');
+  var segWordPal = document.getElementById('seg-wordpal');
   var wordText   = document.getElementById('word-text');
   var labCharset = document.getElementById('lab-charset');
   var knmCell    = document.getElementById('knm-cell');
@@ -2185,6 +2381,8 @@
     document.body.classList.toggle('mode-words', m === 'words');
     // words-static: solid fill has no animation -> hide the SPEED knob.
     document.body.classList.toggle('words-static', m === 'words' && state.wordFill === 'solid');
+    // words-3d: shows the PALETTE picker + is static (SPEED hidden via CSS).
+    document.body.classList.toggle('words-3d', m === 'words' && state.wordFill === '3d');
     if (modeGen)   modeGen.setAttribute('aria-pressed', m === 'generative' ? 'true' : 'false');
     if (modeImg)   modeImg.setAttribute('aria-pressed', m === 'image' ? 'true' : 'false');
     if (modeWords) modeWords.setAttribute('aria-pressed', m === 'words' ? 'true' : 'false');
@@ -2200,6 +2398,7 @@
     setPressed(segCharset, 'data-ramp', state.charset);
     setPressed(segColour, 'data-colour', state.colour);
     if (segWordFill) setPressed(segWordFill, 'data-fill', state.wordFill);
+    if (segWordPal) setPressed(segWordPal, 'data-pal', state.wordPal);
     if (wordText && wordText.value !== state.word) wordText.value = state.word;
     if (btnInvert) btnInvert.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
     syncImageSection();
@@ -2272,6 +2471,8 @@
   // still tracked underneath for the engine-fill paths.
   function enterWordsMode() {
     state.mode = 'words';
+    // long words need a finer grid to render as legible letters (not thin bars)
+    if (state.cell > 7) { state.cell = 6; syncSliderLabels(); resize(); }
     Words.invalidate();
     atlasDirty = true;     // matrix-fill may need its glyph set baked
     syncControls();
@@ -2292,6 +2493,7 @@
     var wordSync = function () {
       state.word = wordText.value;
       state.mode = 'words';
+      if (state.cell > 7) { state.cell = 6; syncSliderLabels(); resize(); }
       Words.invalidate();
       syncControls();
       writeHash();
@@ -2310,6 +2512,17 @@
     if (state.wordFill === 'donut') Donut.reset();
     if (state.wordFill === 'matrix') Matrix.reset();
     syncControls();
+    writeHash();
+    start();
+  });
+
+  // WORDS palette picker — the colour scheme for the 3D block letters.
+  if (segWordPal) segWordPal.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.pal) return;
+    state.wordPal = btn.dataset.pal;
+    state.mode = 'words';
+    setPressed(segWordPal, 'data-pal', state.wordPal);
     writeHash();
     start();
   });
@@ -2616,8 +2829,15 @@
     window.__ascii = {
       state: state,
       gridToText: gridToText,
+      gridToAnsi: gridToAnsi,
       getMask: function () { return Words.getMask(); },
-      grid: function () { return { cols: cols, rows: rows, lum: lum, glyph: glyph }; }
+      grid: function () { return { cols: cols, rows: rows, lum: lum, glyph: glyph, cellCol: cellCol }; },
+      api: {
+        start: start,
+        syncControls: syncControls,
+        invalidateWords: function () { Words.invalidate(); atlasDirty = true; },
+        renderOnce: function () { step(0); }   // synchronous single render for tests
+      }
     };
   }
 })();
