@@ -706,6 +706,11 @@
         <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
         <button class="tab" id="eng-matrix" data-engine="matrix" type="button" aria-pressed="false">matrix</button>
         <button class="tab" id="eng-plasma" data-engine="plasma" type="button" aria-pressed="false">plasma</button>
+        <button class="tab" id="eng-life" data-engine="life" type="button" aria-pressed="false">life</button>
+        <button class="tab" id="eng-fire" data-engine="fire" type="button" aria-pressed="false">fire</button>
+        <button class="tab" id="eng-flow" data-engine="flow" type="button" aria-pressed="false">flow</button>
+        <button class="tab" id="eng-starfield" data-engine="starfield" type="button" aria-pressed="false">stars</button>
+        <button class="tab" id="eng-tunnel" data-engine="tunnel" type="button" aria-pressed="false">tunnel</button>
       </div>
     </div>
 
@@ -759,6 +764,10 @@
         <button class="tab" data-colour="phosphor" type="button" aria-pressed="true" aria-label="phosphor colour">phosphor</button>
         <button class="tab" data-colour="amber" type="button" aria-pressed="false" aria-label="amber colour">amber</button>
         <button class="tab" data-colour="paper" type="button" aria-pressed="false" aria-label="paper colour">paper</button>
+        <button class="tab" data-colour="spectrum" type="button" aria-pressed="false" aria-label="spectrum gradient colour">spectrum</button>
+        <button class="tab" data-colour="fire" type="button" aria-pressed="false" aria-label="fire gradient colour">fire</button>
+        <button class="tab" data-colour="ice" type="button" aria-pressed="false" aria-label="ice gradient colour">ice</button>
+        <button class="tab" data-colour="neon" type="button" aria-pressed="false" aria-label="neon gradient colour">neon</button>
       </div>
     </div>
 
@@ -792,6 +801,11 @@
         <button class="tab" data-look="Mono" type="button" aria-label="Mono look">Mono</button>
         <button class="tab" data-look="Signal" type="button" aria-label="Signal look">Signal</button>
         <button class="tab" data-look="Ember" type="button" aria-label="Ember look">Ember</button>
+        <button class="tab" data-look="Inferno" type="button" aria-label="Inferno look">Inferno</button>
+        <button class="tab" data-look="Drift" type="button" aria-label="Drift look">Drift</button>
+        <button class="tab" data-look="Aurora" type="button" aria-label="Aurora look">Aurora</button>
+        <button class="tab" data-look="Voltage" type="button" aria-label="Voltage look">Voltage</button>
+        <button class="tab" data-look="Noir" type="button" aria-label="Noir look">Noir</button>
       </div>
     </div>
 
@@ -865,8 +879,38 @@
   var COLOURS = {
     phosphor: { bg:'#05080a', ink:[57,255,122],  paper:false },
     amber:    { bg:'#0a0600', ink:[255,176,38],   paper:false },
-    paper:    { bg:'#e4e6e0', ink:[18,40,24],      paper:true  }
+    paper:    { bg:'#e4e6e0', ink:[18,40,24],      paper:true  },
+    // GRADIENT colours — vivid multi-colour. They render via the per-cell path
+    // (cellCol): a cell's lum (0..1) maps through `stops` to an RGB. `grad:true`
+    // flags the gradient path; `ink` is only a fallback (e.g. atlas bake colour).
+    // Each draws on a near-black stage so the colours pop. The faceplate panel is
+    // unaffected — it overrides the theme tokens locally to its own light metal.
+    spectrum: { bg:'#05060a', ink:[120,200,255], paper:false, grad:true,
+                stops:[[60,8,90],[40,60,220],[20,210,200],[120,230,40],[255,210,20],[255,70,40]] },
+    fire:     { bg:'#05030a', ink:[255,150,40],  paper:false, grad:true,
+                stops:[[6,2,8],[120,12,6],[210,40,6],[255,120,16],[255,210,70],[255,255,235]] },
+    ice:      { bg:'#03060c', ink:[120,200,255], paper:false, grad:true,
+                stops:[[2,4,12],[10,30,90],[20,90,200],[40,170,235],[150,225,250],[245,252,255]] },
+    neon:     { bg:'#06030a', ink:[230,60,210],  paper:false, grad:true,
+                stops:[[10,4,14],[210,30,190],[150,30,210],[40,140,235],[40,232,228],[156,247,46]] }
   };
+
+  // map a luminance 0..1 through a gradient colour's stops -> packed 0xRRGGBB.
+  // Stops are evenly spaced; we lerp between the two bracketing stops.
+  function gradLerp(stops, v) {
+    if (v < 0) v = 0; else if (v > 1) v = 1;
+    var n = stops.length - 1;
+    var f = v * n;
+    var i = f | 0;
+    if (i >= n) i = n - 1;
+    var t = f - i;
+    var a = stops[i], b = stops[i + 1];
+    var r = (a[0] + (b[0] - a[0]) * t) | 0;
+    var g = (a[1] + (b[1] - a[1]) * t) | 0;
+    var bl = (a[2] + (b[2] - a[2]) * t) | 0;
+    return ((r & 255) << 16) | ((g & 255) << 8) | (bl & 255);
+  }
+  function isGradient(c) { var C = COLOURS[c]; return !!(C && C.grad); }
 
   /* ---------- live state ---------- */
 
@@ -909,7 +953,7 @@
 
   // the generative engines (the only ones reachable via the ENGINE tabs); the
   // 'image' render is activated from the IMAGE section, not an engine tab.
-  var GEN_ENGINES = { donut:1, matrix:1, plasma:1 };
+  var GEN_ENGINES = { donut:1, matrix:1, plasma:1, life:1, fire:1, flow:1, starfield:1, tunnel:1 };
   // remember the last generative engine, so removing an image returns to it
   // (donut by default). Seeded from the boot state if it's already generative.
   var lastGenEngine = 'donut';
@@ -1252,6 +1296,335 @@
     }
 
     return { render: render, setTime: setTime };
+  })();
+
+  /* ====================================================================
+     ENGINE 5 — LIFE  (Conway's Game of Life with a fading death trail)
+     A Uint8 grid stepped ~11 generations/sec (NOT every frame). lum holds a
+     decaying value per cell: live cells snap to full; recently-died cells fade
+     out over ~0.4s so the texture leaves ghost trails. Pointer paints live
+     cells. reset() seeds ~30% noise plus a couple of gliders.
+     ==================================================================== */
+  var Life = (function () {
+    var a = null, b = null;       // current + scratch Uint8 grids
+    var acc = 0;                  // generation-step accumulator (seconds)
+    var STEP = 1 / 11;            // ~11 gens/sec regardless of frame rate
+    var lcols = 0, lrows = 0;
+
+    function alloc() {
+      lcols = cols; lrows = rows;
+      a = new Uint8Array(gridN);
+      b = new Uint8Array(gridN);
+    }
+    function putGlider(ox, oy) {
+      var pts = [[1,0],[2,1],[0,2],[1,2],[2,2]];
+      for (var i = 0; i < pts.length; i++) {
+        var gx = ox + pts[i][0], gy = oy + pts[i][1];
+        if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) a[gy * cols + gx] = 1;
+      }
+    }
+    function reset() {
+      reseed();
+      alloc();
+      for (var i = 0; i < gridN; i++) a[i] = rng() < 0.30 ? 1 : 0;
+      putGlider(2, 2);
+      putGlider((cols * 0.6) | 0, (rows * 0.3) | 0);
+      putGlider((cols * 0.3) | 0, (rows * 0.7) | 0);
+      lum.fill(0);
+      glyph.fill(0);
+      acc = 0;
+    }
+    function generation() {
+      // toroidal neighbour count -> b, then swap a<->b. Survivors stay bright;
+      // cells that just died decay (handled in render via lum), births snap up.
+      for (var y = 0; y < rows; y++) {
+        var ym = (y - 1 + rows) % rows, yp = (y + 1) % rows;
+        for (var x = 0; x < cols; x++) {
+          var xm = (x - 1 + cols) % cols, xp = (x + 1) % cols;
+          var n = a[ym*cols+xm] + a[ym*cols+x] + a[ym*cols+xp] +
+                  a[y*cols+xm]               + a[y*cols+xp] +
+                  a[yp*cols+xm] + a[yp*cols+x] + a[yp*cols+xp];
+          var alive = a[y*cols+x];
+          b[y*cols+x] = (alive ? (n === 2 || n === 3) : (n === 3)) ? 1 : 0;
+        }
+      }
+      var t = a; a = b; b = t;
+    }
+    function render(dt) {
+      if (!a || lcols !== cols || lrows !== rows || a.length !== gridN) reset();
+      // pointer paints a small live cluster (before stepping so it propagates)
+      if (pointer.active && pointer.gx >= 0 && pointer.gx < cols && pointer.gy >= 0 && pointer.gy < rows) {
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          var px = pointer.gx + dx, py = pointer.gy + dy;
+          if (px >= 0 && px < cols && py >= 0 && py < rows && rng() < 0.7) a[py*cols+px] = 1;
+        }
+      }
+      acc += dt;
+      var stepped = false;
+      // cap to a couple of generations per frame so a long dt can't stall
+      var guard = 0;
+      while (acc >= STEP && guard < 3) { generation(); acc -= STEP; stepped = true; guard++; }
+      glyph.fill(0);
+      // lum: live -> 1; dead -> decay toward 0 (fading death trail). On a gen-step
+      // newly-dead cells start their fade from the previous lum; live cells reset.
+      var decay = stepped ? 0.55 : Math.pow(0.04, dt); // strong fade per gen-step
+      for (var i = 0; i < gridN; i++) {
+        if (a[i]) lum[i] = 1;
+        else { var v = lum[i] * decay; lum[i] = v < 0.02 ? 0 : v; }
+      }
+    }
+    function settle() {
+      // reduced-motion: a developed, recognizable Life texture in one shot.
+      reset();
+      for (var g = 0; g < 6; g++) generation();
+      glyph.fill(0);
+      for (var i = 0; i < gridN; i++) lum[i] = a[i] ? 1 : 0;
+    }
+    return { reset: reset, render: render, settle: settle };
+  })();
+
+  /* ====================================================================
+     ENGINE 6 — FIRE  (the classic Doom/demoscene fire)
+     A heat buffer; the bottom row is held hot with flicker. Each cell above
+     takes the heat of the cell below minus a small random cooling, with a
+     sideways wind drift so flames lean + lick. lum = heat. Rises + flickers.
+     Pointer drops a hot ember.
+     ==================================================================== */
+  var Fire = (function () {
+    var heat = null;
+    var fcols = 0, frows = 0;
+    function alloc() { fcols = cols; frows = rows; heat = new Float32Array(gridN); }
+    function reset() { reseed(); alloc(); heat.fill(0); }
+    function render(dt) {
+      if (!heat || fcols !== cols || frows !== rows || heat.length !== gridN) reset();
+      // sim runs in fixed sub-steps so speed scales heat propagation, not fps.
+      var steps = 1 + (state.speed * 1.5 | 0); if (steps > 4) steps = 4;
+      // cooling is scaled by grid height so flames climb a fair fraction of the
+      // screen regardless of how many rows there are (taller grids -> gentler
+      // per-row cooling so the fire still reaches well up).
+      var coolMax = Math.min(0.10, 5.0 / rows);
+      for (var s = 0; s < steps; s++) {
+        // bottom three rows = the hot source (flickering, always near max)
+        for (var br = 0; br < 3; br++) {
+          var ry = rows - 1 - br;
+          if (ry < 0) break;
+          for (var x = 0; x < cols; x++) {
+            heat[ry*cols+x] = 0.85 + rng() * 0.15;
+          }
+        }
+        // propagate upward: each cell <- below minus cooling, with wind drift
+        for (var y = 0; y < rows - 1; y++) {
+          for (var xx = 0; xx < cols; xx++) {
+            var wind = (rng() * 3 | 0) - 1;        // -1,0,1 sideways
+            var src = xx + wind; if (src < 0) src = 0; else if (src >= cols) src = cols - 1;
+            var below = heat[(y+1)*cols+src];
+            var cool = rng() * coolMax;
+            var v = below - cool;
+            heat[y*cols+xx] = v < 0 ? 0 : v;
+          }
+        }
+      }
+      // pointer ember: inject heat near the cursor
+      if (pointer.active && pointer.gx >= 0 && pointer.gx < cols && pointer.gy >= 0 && pointer.gy < rows) {
+        for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+          var px = pointer.gx + dx, py = pointer.gy + dy;
+          if (px >= 0 && px < cols && py >= 0 && py < rows) heat[py*cols+px] = 1;
+        }
+      }
+      glyph.fill(0);
+      lum.set(heat);
+    }
+    function settle() {
+      reset();
+      for (var i = 0; i < 60; i++) render(1/30);
+    }
+    return { reset: reset, render: render, settle: settle };
+  })();
+
+  /* ====================================================================
+     ENGINE 7 — FLOW  (a directional drifting fbm field that streams like liquid)
+     Distinct from plasma: the field is SAMPLED along a slowly-rotating advection
+     direction so structures translate across the screen (a current), and a
+     domain-warp (fbm-of-fbm) gives ropey, liquid filaments. Brightness peaks on
+     the flow ridges. Pointer injects a local attractor that bends the stream.
+     ==================================================================== */
+  var Flow = (function () {
+    var t = 0;
+    function setTime(v) { t = v; }
+    // cheap value-noise via summed sines (no allocation, smooth + tileable-ish)
+    function fbm(x, y) {
+      var v = 0, amp = 0.5, fx = x, fy = y;
+      for (var o = 0; o < 3; o++) {
+        v += amp * (Math.sin(fx) * Math.cos(fy * 0.9) + Math.sin((fx + fy) * 0.6));
+        fx = fx * 2.02 + 1.7; fy = fy * 2.02 - 1.3; amp *= 0.5;
+      }
+      return v;
+    }
+    function render(dt) {
+      t += dt;
+      glyph.fill(0);
+      var ph = t + (state.seed | 0) * 0.137;
+      // advection direction slowly rotates -> the whole field drifts as a current
+      var ang = ph * 0.15;
+      var dirx = Math.cos(ang), diry = Math.sin(ang);
+      var sc = 0.09;                       // spatial frequency
+      var drift = ph * 0.9;                // how far the current has travelled
+      var pgx = pointer.active ? pointer.gx : -999;
+      var pgy = pointer.active ? pointer.gy : -999;
+      var idx = 0;
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++, idx++) {
+          // sample point advected along the flow direction
+          var sx = x * sc - dirx * drift;
+          var sy = y * sc - diry * drift;
+          // domain warp: offset the sample by another fbm (ropey filaments)
+          var wx = fbm(sx + 1.3, sy - 0.7);
+          var wy = fbm(sx - 2.1, sy + 3.4);
+          var v = fbm(sx + wx * 0.8 + drift * 0.2, sy + wy * 0.8);
+          // pointer attractor: bend the stream toward/around the cursor
+          if (pgx > -900) {
+            var ddx = x - pgx, ddy = y - pgy;
+            var rr = Math.sqrt(ddx*ddx + ddy*ddy);
+            v += Math.sin(rr * 0.4 - ph * 2.0) * Math.exp(-rr * 0.045) * 1.6;
+          }
+          // ridge transform -> bright filaments on the flow lines
+          var n = (v + 2.2) / 4.4;          // ~0..1
+          if (n < 0) n = 0; else if (n > 1) n = 1;
+          n = 1 - Math.abs(n - 0.5) * 2;    // ridge: peak at the mid-band
+          lum[idx] = n * n;
+        }
+      }
+    }
+    function settle() { setTime(4.0); render(0); }
+    return { render: render, setTime: setTime, settle: settle };
+  })();
+
+  /* ====================================================================
+     ENGINE 8 — STARFIELD  (3D warp toward the viewer)
+     Stars {x,y,z} in a centred volume; z shrinks each frame (warp speed). When
+     a star passes the eye it respawns far away. Project x/y by 1/z from the
+     centre vanishing point -> a cell; brightness = nearness. A short streak is
+     drawn behind each star (its previous projected cell) for the warp look.
+     Pointer shifts the vanishing point.
+     ==================================================================== */
+  var Starfield = (function () {
+    var N = 0, sx = null, sy = null, sz = null;
+    var aspect = 0.5;            // cell w/h, so X spread matches the round look
+    function alloc() {
+      N = Math.max(140, Math.min(1100, (cols * rows / 7) | 0));
+      sx = new Float32Array(N); sy = new Float32Array(N); sz = new Float32Array(N);
+    }
+    function spawn(i, full) {
+      sx[i] = (rng() * 2 - 1);
+      sy[i] = (rng() * 2 - 1);
+      sz[i] = full ? rng() : 1;   // 0..1 depth (1 = far)
+    }
+    function reset() {
+      reseed();
+      alloc();
+      for (var i = 0; i < N; i++) spawn(i, true);
+    }
+    function render(dt) {
+      if (!sx || !N) reset();
+      lum.fill(0);
+      glyph.fill(0);
+      // vanishing point: centre, shifted by the pointer
+      var vx = cols * 0.5, vy = rows * 0.5;
+      if (pointer.active && pointer.gx >= 0) {
+        vx = cols * 0.5 + (pointer.gx - cols * 0.5) * 0.6;
+        vy = rows * 0.5 + (pointer.gy - rows * 0.5) * 0.6;
+      }
+      var spread = Math.min(cols, rows / aspect) * 0.9;
+      var warp = dt * (0.35 + state.speed * 0.55);
+      for (var i = 0; i < N; i++) {
+        var pz = sz[i];
+        sz[i] -= warp;
+        if (sz[i] <= 0.02) { spawn(i, false); continue; }
+        var z = sz[i];
+        var px = vx + (sx[i] / z) * spread;
+        var py = vy + (sy[i] / z) * spread * aspect;
+        var cx = px | 0, cy = py | 0;
+        // nearer = brighter, with a floor so even distant stars register as faint
+        // specks (a starfield reads as a field, not a few bright dots).
+        var bright = 0.18 + (1 - z) * 0.95;
+        if (bright > 1) bright = 1;
+        // streak: walk from the star's previous (farther) projection to its
+        // current one, laying down a fading warp line — long enough to read as
+        // motion blur radiating from the vanishing point.
+        var ppx = vx + (sx[i] / pz) * spread;
+        var ppy = vy + (sy[i] / pz) * spread * aspect;
+        var dlen = Math.abs(px - ppx) + Math.abs(py - ppy);
+        var steps = 2 + (dlen | 0); if (steps > 14) steps = 14;
+        for (var s = 0; s <= steps; s++) {
+          var tt = s / steps;
+          var ix = (px + (ppx - px) * tt) | 0;
+          var iy = (py + (ppy - py) * tt) | 0;
+          if (ix < 0 || ix >= cols || iy < 0 || iy >= rows) continue;
+          var v = bright * (1 - tt * 0.65);     // head bright, tail fades
+          var k = iy * cols + ix;
+          if (v > lum[k]) lum[k] = v;
+        }
+        if (cx >= 0 && cx < cols && cy >= 0 && cy < rows) {
+          var ki = cy * cols + cx;
+          if (bright > lum[ki]) lum[ki] = bright;
+        }
+      }
+    }
+    function settle() {
+      reset();
+      for (var i = 0; i < 30; i++) render(1/30);
+    }
+    return { reset: reset, render: render, settle: settle };
+  })();
+
+  /* ====================================================================
+     ENGINE 9 — TUNNEL  (a rushing radial tunnel)
+     For each cell compute its angle + radius from the centre. A scrolling
+     texture = angular stripes (function of angle) times radial rings (function
+     of 1/radius + time) rushes inward; brightness is modulated by radius so the
+     mouth of the tunnel reads brighter near the rim and the throat darkens.
+     Pointer moves the centre.
+     ==================================================================== */
+  var Tunnel = (function () {
+    var t = 0;
+    var aspect = 0.5;
+    function setTime(v) { t = v; }
+    function render(dt) {
+      t += dt * (0.6 + state.speed * 0.8);
+      glyph.fill(0);
+      var cx = cols * 0.5, cy = rows * 0.5;
+      if (pointer.active && pointer.gx >= 0) { cx = pointer.gx; cy = pointer.gy; }
+      var sp = (state.seed | 0) * 0.07;
+      var maxR = Math.min(cols, rows / aspect) * 0.5;
+      var idx = 0;
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++, idx++) {
+          var dx = (x - cx);
+          var dy = (y - cy) / aspect;       // correct cell aspect so rings are round
+          var r = Math.sqrt(dx*dx + dy*dy) + 0.0001;
+          var ang = Math.atan2(dy, dx);
+          // tunnel texture coords: depth = k/r rushes inward as t grows; angle
+          // wraps the wall into stripes. The +t scroll makes rings race to centre.
+          var depth = 14.0 / r + t * 3.0 + sp;
+          var u = ang * (10 / Math.PI);       // 20 angular stripes around the wall
+          // sharp concentric rings (raised sine -> crisp light bands)
+          var ringS = Math.sin(depth);
+          var rings = Math.pow(0.5 + 0.5 * ringS, 1.6);
+          var stripeS = Math.sin(u + depth * 0.4);
+          var stripes = 0.5 + 0.5 * stripeS;
+          var tex = rings * (0.55 + 0.45 * stripes);
+          // radial brightness: bright wall near the rim, fading to a DARK throat
+          // at the centre (the vanishing point) so the tunnel reads as 3D depth.
+          var fade = r / maxR; if (fade > 1) fade = 1;
+          var throat = fade * fade * (3 - 2 * fade); // smoothstep 0(centre)->1(rim)
+          var v = tex * (0.06 + 0.94 * throat);
+          if (v < 0) v = 0; else if (v > 1) v = 1;
+          lum[idx] = v;
+        }
+      }
+    }
+    function settle() { setTime(2.0); render(0); }
+    return { render: render, setTime: setTime, settle: settle };
   })();
 
   /* ====================================================================
@@ -1926,11 +2299,18 @@
     var cpw = Math.max(1, cw * dpr);
     var cph = Math.max(1, ch * dpr);
 
-    // PER-CELL COLOUR PATH — words-3d with a real palette. Each non-blank cell
-    // owns a colour in cellCol (packed RGB); draw its glyph directly with
-    // fillText in that colour. The render is STATIC, so per-cell fills are cheap.
+    // PER-CELL COLOUR PATHS. Two distinct branches keyed off the source:
+    //  - words-3d (state.mode==='words' && wordFill==='3d') -> SOLID BLOCKS
+    //    (the chunky extruded-logo look; paintPerCell draws filled squares).
+    //  - everything else with colActive (gradient colours) -> RAMP GLYPHS in
+    //    colour (paintPerCellGlyph draws the ASCII char, vividly tinted) so the
+    //    art stays ASCII, not blocks.
     if (colActive && cellCol) {
-      paintPerCell(ramp, rampLen, gamma, cpw, cph);
+      if (state.mode === 'words' && state.wordFill === '3d') {
+        paintPerCell(ramp, rampLen, gamma, cpw, cph);
+      } else {
+        paintPerCellGlyph(ramp, rampLen, gamma, tileW, tileH);
+      }
       return;
     }
 
@@ -2020,6 +2400,46 @@
         var g = rw < 5 ? 1 : Math.round(rw * 0.16);
         if (cp === 0x2593) { g = rw < 6 ? 2 : Math.round(rw * 0.30); }
         ctx.fillRect(rx, ry, rw - g, rh - g);
+      }
+    }
+  }
+
+  // PER-CELL GLYPH renderer (GRADIENT colours). Draws each non-blank cell's
+  // active-ramp GLYPH (ASCII char by lum) in its own packed cellCol colour via
+  // fillText — vivid multi-colour ASCII, NOT solid blocks. Forced glyphs (matrix
+  // fill) are honoured. Cells left at -1 fall back to the atlas-ink colour.
+  function paintPerCellGlyph(ramp, rampLen, gamma, tileW, tileH) {
+    var ink = COLOURS[state.colour].ink;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.font = '700 ' + Math.round(ch * dpr * 0.96) + 'px ' +
+      'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+    ctx.globalAlpha = 1;
+    var hw = tileW / 2, hh = tileH / 2 + tileH * 0.02;
+    var i = 0, prevFill = '';
+    for (var y = 0; y < rows; y++) {
+      var cyp = y * tileH + hh;
+      for (var x = 0; x < cols; x++, i++) {
+        var v = lum[i];
+        if (v <= 0.001) continue;
+        if (gamma !== 1) v = Math.pow(v, 1 / gamma);
+        if (v <= 0.004) continue;
+        var cp = glyph[i];
+        if (cp === 0) {
+          var ri = (v * (rampLen - 1) + 0.5) | 0;
+          if (ri < 1) continue;
+          if (ri > rampLen - 1) ri = rampLen - 1;
+          cp = ramp.charCodeAt(ri);
+          if (cp === 32) continue;
+        }
+        var packed = cellCol[i], fill;
+        if (packed >= 0) {
+          fill = 'rgb(' + ((packed >> 16) & 255) + ',' + ((packed >> 8) & 255) + ',' + (packed & 255) + ')';
+        } else {
+          fill = 'rgb(' + ink[0] + ',' + ink[1] + ',' + ink[2] + ')';
+        }
+        if (fill !== prevFill) { ctx.fillStyle = fill; prevFill = fill; }
+        ctx.fillText(String.fromCharCode(cp), x * tileW + hw, cyp);
       }
     }
   }
@@ -2150,6 +2570,9 @@
     reseed();
     Matrix.reset();
     Donut.reset();
+    Life.reset();
+    Fire.reset();
+    Starfield.reset();
     syncControls();
     writeHash();
     start(); // repaint (reduced-motion has no rAF loop)
@@ -2240,8 +2663,37 @@
     else if (state.mode === 'image')   Image_.render(dt);
     else if (state.engine === 'donut') Donut.render(dt * sp, tiltX, tiltY);
     else if (state.engine === 'matrix') Matrix.render(dt * sp);
+    else if (state.engine === 'plasma') Plasma.render(dt * sp);
+    else if (state.engine === 'life')   Life.render(dt);
+    else if (state.engine === 'fire')   Fire.render(dt);
+    else if (state.engine === 'flow')   Flow.render(dt * sp);
+    else if (state.engine === 'starfield') Starfield.render(dt);
+    else if (state.engine === 'tunnel') Tunnel.render(dt);
     else                                Plasma.render(dt * sp);
+    applyGradient();
     paint();
+  }
+
+  /* ---------- GRADIENT colour mapping ----------
+     When the active colour is a gradient (spectrum/fire/ice/neon), map each
+     non-blank cell's lum -> a packed RGB into cellCol[] and turn on the per-cell
+     path. The renderer then draws the active RAMP GLYPH (ASCII char by lum) in
+     that colour — vivid multi-colour ASCII, NOT solid blocks (that branch stays
+     reserved for words-3d via state.wordFill). Skipped for words-3d (which owns
+     cellCol itself) and when colActive is already set by another path. */
+  function applyGradient() {
+    if (!isGradient(state.colour)) return;
+    if (state.mode === 'words' && state.wordFill === '3d') return; // 3d owns colour
+    if (!cellCol || cellCol.length !== gridN) return;
+    var stops = COLOURS[state.colour].stops;
+    var gamma = state.contrast;
+    for (var i = 0; i < gridN; i++) {
+      var v = lum[i];
+      if (v <= 0.001) { cellCol[i] = -1; continue; }
+      if (gamma !== 1) v = Math.pow(v, 1 / gamma);
+      cellCol[i] = gradLerp(stops, v);
+    }
+    colActive = true;
   }
 
   function loop(now) {
@@ -2281,10 +2733,21 @@
     } else if (state.engine === 'matrix') {
       Matrix.reset();           // re-prime the full-height field
       Matrix.render(0.4);       // larger settle step advances heads into view
+    } else if (state.engine === 'life') {
+      Life.settle();            // a developed Life texture in one shot
+    } else if (state.engine === 'fire') {
+      Fire.settle();            // a settled column of flame
+    } else if (state.engine === 'flow') {
+      Flow.settle();            // a developed flow field (fixed phase)
+    } else if (state.engine === 'starfield') {
+      Starfield.settle();       // a settled star spread with streaks
+    } else if (state.engine === 'tunnel') {
+      Tunnel.settle();          // a developed tunnel (fixed phase)
     } else {
       Plasma.setTime(3.0);      // fixed developed phase (deterministic)
       Plasma.render(0);
     }
+    applyGradient();
     paint();
   }
 
@@ -2337,7 +2800,7 @@
     for (var i = 0; i < parts.length; i++) {
       var kv = parts[i].split('=');
       var k = kv[0], val = kv[1];
-      if (k === 'e' && (val === 'donut' || val === 'matrix' || val === 'plasma' || val === 'image')) state.engine = val;
+      if (k === 'e' && (GEN_ENGINES[val] || val === 'image')) state.engine = val;
       else if (k === 'iv') state.invert = (val === '1');
       else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
@@ -2561,7 +3024,14 @@
     Blueprint: { e:'plasma', c:'blocks',   k:'paper',    sp:80,  ce:12, sd:0 },
     Mono:      { e:'donut',  c:'standard', k:'paper',    sp:70,  ce:10, sd:0 },
     Signal:    { e:'plasma', c:'binary',   k:'phosphor', sp:140, ce:10, sd:0 },
-    Ember:     { e:'matrix', c:'standard', k:'amber',    sp:100, ce:12, sd:0 }
+    Ember:     { e:'matrix', c:'standard', k:'amber',    sp:100, ce:12, sd:0 },
+    // STYLE-ONLY gradient looks — they restyle whatever engine is active (no
+    // engine switch; applyPreset ignores p.e). Charset + colour + speed/cell.
+    Inferno:   { c:'standard', k:'fire',     sp:160, ce:11, sd:0 },
+    Drift:     { c:'standard', k:'spectrum', sp:55,  ce:10, sd:0 },
+    Aurora:    { c:'blocks',   k:'ice',      sp:80,  ce:12, sd:0 },
+    Voltage:   { c:'photo',    k:'neon',     sp:170, ce:10, sd:0 },
+    Noir:      { c:'standard', k:'paper',    sp:50,  ce:11, sd:0 }
   };
   function applyPreset(name) {
     var p = LOOKS[name];
