@@ -432,6 +432,73 @@
     cursor:not-allowed;
   }
 
+  /* ---- IMAGE SECTION — two states toggled by body.has-image ---------------
+     Default (no image): show .image-empty (the "insert image" button), hide
+     .image-loaded. With body.has-image: hide .image-empty, show .image-loaded
+     (thumbnail + replace + remove + invert). No dead/blank controls in either
+     state. */
+  .image-loaded{ display:none; flex-direction:column; gap:6px; }
+  body.has-image .image-empty{ display:none; }
+  body.has-image .image-loaded{ display:flex; }
+
+  .image-row{
+    display:flex;
+    align-items:stretch;
+    gap:6px;
+  }
+  .image-thumb-actions{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    flex:1 1 auto;
+    min-width:0;
+  }
+  .image-thumb-actions .tab{ flex:1 1 auto; }
+
+  /* clickable thumbnail tile — a small metal-framed preview of the loaded
+     image. Pressed (aria-pressed="true") when the image render is active. */
+  .img-thumb{
+    appearance:none;
+    -webkit-appearance:none;
+    flex:0 0 auto;
+    width:62px;height:62px;
+    padding:3px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid rgba(0,0,0,.55);
+    background-color:#06060a;
+    background-image:linear-gradient(180deg, #1a1b22 0%, #101117 55%, #08090d 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.12),
+      0 2px 4px rgba(0,0,0,.42);
+    transition:transform .07s ease, box-shadow .1s ease, border-color .1s ease;
+  }
+  .img-thumb img{
+    display:block;
+    width:100%;height:100%;
+    object-fit:cover;
+    border-radius:5px;
+    image-rendering:auto;
+  }
+  .img-thumb:hover{
+    transform:translateY(-1px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 4px 8px rgba(0,0,0,.5);
+  }
+  .img-thumb:active{ transform:translateY(1px); }
+  /* active = image is the current render: bright accent ring */
+  .img-thumb[aria-pressed="true"]{
+    border-color:#fff;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,255,255,.9),
+      0 0 0 2px rgba(255,255,255,.55),
+      0 2px 6px rgba(0,0,0,.4);
+  }
+  .img-thumb:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce){
+    .img-thumb{ transition:box-shadow .12s ease, border-color .12s ease; }
+    .img-thumb:hover, .img-thumb:active{ transform:none; }
+  }
+
   /* TOAST — self-contained, theme-coloured, fades after ~1.6s */
   .toast{
     position:fixed;
@@ -507,20 +574,42 @@
   <div class="controls" role="group" aria-label="Instrument controls">
     <div class="group">
       <span class="lab" id="lab-engine">Engine</span>
-      <div class="tabs cols2" role="group" aria-labelledby="lab-engine">
+      <div class="tabs" role="group" aria-labelledby="lab-engine">
         <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
         <button class="tab" id="eng-matrix" data-engine="matrix" type="button" aria-pressed="false">matrix</button>
         <button class="tab" id="eng-plasma" data-engine="plasma" type="button" aria-pressed="false">plasma</button>
-        <button class="tab" id="eng-image" data-engine="image" type="button" aria-pressed="false">image</button>
       </div>
     </div>
 
-    <div class="group">
+    <!-- IMAGE — a persistent loaded SOURCE, separate from the generative engines.
+         The section toggles between two states via body.has-image: NO image (a
+         single "insert image" button) vs LOADED (clickable thumbnail that
+         activates the image render + replace + remove + invert). -->
+    <div class="group image-group" id="grp-image">
       <span class="lab" id="lab-image">Image</span>
-      <div class="tabs cols2" role="group" aria-labelledby="lab-image">
-        <button class="tab" id="img-insert" type="button" aria-label="Insert an image to convert to ASCII">insert</button>
-        <button class="tab" id="img-invert" type="button" aria-pressed="false" aria-label="Invert image luminance mapping">invert</button>
+
+      <!-- state A: no image loaded -->
+      <div class="tabs image-empty" role="group" aria-labelledby="lab-image">
+        <button class="tab" id="img-insert" type="button" aria-label="Insert an image to convert to ASCII">insert image</button>
       </div>
+
+      <!-- state B: an image is loaded -->
+      <div class="image-loaded" role="group" aria-labelledby="lab-image">
+        <div class="image-row">
+          <button class="img-thumb" id="img-thumb" type="button" aria-pressed="false"
+                  aria-label="Activate image render (show the loaded image as ASCII)">
+            <img id="img-thumb-img" alt="loaded image thumbnail" decoding="async">
+          </button>
+          <div class="image-thumb-actions">
+            <button class="tab" id="img-replace" type="button" aria-label="Replace the loaded image">replace</button>
+            <button class="tab" id="img-remove" type="button" aria-label="Remove the loaded image and return to a generative engine">remove ✕</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="tab" id="img-invert" type="button" aria-pressed="false" aria-label="Invert image luminance mapping">invert</button>
+        </div>
+      </div>
+
       <input type="file" id="img-file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;left:-9999px" aria-hidden="true" tabindex="-1">
     </div>
 
@@ -671,6 +760,13 @@
     contrast:100,    // hash units (percent)
     seed:    0
   };
+
+  // the generative engines (the only ones reachable via the ENGINE tabs); the
+  // 'image' render is activated from the IMAGE section, not an engine tab.
+  var GEN_ENGINES = { donut:1, matrix:1, plasma:1 };
+  // remember the last generative engine, so removing an image returns to it
+  // (donut by default). Seeded from the boot state if it's already generative.
+  var lastGenEngine = 'donut';
 
   /* ---------- seeded PRNG (mulberry32) — best-effort reproducibility ---------
      A small deterministic generator so the same state.seed reproduces the same
@@ -1574,7 +1670,11 @@
   var btnRec     = document.getElementById('exp-rec');
   var imgFile    = document.getElementById('img-file');
   var btnInsert  = document.getElementById('img-insert');
+  var btnReplace = document.getElementById('img-replace');
+  var btnRemove  = document.getElementById('img-remove');
   var btnInvert  = document.getElementById('img-invert');
+  var btnThumb   = document.getElementById('img-thumb');
+  var thumbImg   = document.getElementById('img-thumb-img');
   var toastEl    = document.getElementById('toast');
 
   /* ---------- toast: self-contained, theme-coloured, fades after ~1.6s ---- */
@@ -1703,7 +1803,9 @@
   function applyPreset(name) {
     var p = LOOKS[name];
     if (!p) return;
-    Image_.setImage(null);   // a LOOK is a clean generative preset — drop any inserted image
+    // A LOOK switches to its generative engine but KEEPS any loaded image — you
+    // can click the thumbnail to return to it. No surprise clearing.
+    lastGenEngine = p.e;
     state.engine   = p.e;
     if (p.c) state.charset = p.c;
     else state.charset = (p.e === 'donut') ? 'donut' : 'standard';
@@ -1760,39 +1862,55 @@
     refreshKnobs();
   }
 
+  // reflect the IMAGE section state in the DOM: toggle body.has-image (which
+  // CSS uses to swap the "insert image" button for the thumbnail+controls), and
+  // mark the thumbnail "active"/pressed when the image render is the current one.
+  function syncImageSection() {
+    var has = Image_.hasImage();
+    document.body.classList.toggle('has-image', has);
+    if (btnThumb) btnThumb.setAttribute('aria-pressed',
+      (has && state.engine === 'image') ? 'true' : 'false');
+  }
+
   function syncControls() {
-    setPressed(segEngine, 'data-engine', state.engine);
+    // the ENGINE tabs are generative-only; mark the active engine, or none when
+    // the image render is active (so no generative tab reads as pressed).
+    setPressed(segEngine, 'data-engine', state.engine === 'image' ? null : state.engine);
     setPressed(segCharset, 'data-ramp', state.charset);
     setPressed(segColour, 'data-colour', state.colour);
-    var biv = document.getElementById('img-invert');
-    if (biv) biv.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
+    if (btnInvert) btnInvert.setAttribute('aria-pressed', state.invert ? 'true' : 'false');
+    syncImageSection();
     syncSliderLabels();
     syncLook();
   }
 
+  // Switch the active render. Generative engines (donut/matrix/plasma) are
+  // selected from the ENGINE tabs and NEVER clear the image — switching keeps
+  // any loaded image (the thumbnail just stops reading "active"). The 'image'
+  // render is activated from the IMAGE section (thumbnail / load); it requires a
+  // loaded image (a bare e=image hash with no bytes falls back to a generative
+  // engine instead of a blank stage).
   function setEngine(e) {
-    if (state.engine === e) {
-      // re-tapping 'image' with no image yet -> prompt for one
-      if (e === 'image' && !Image_.hasImage()) openPicker();
+    if (GEN_ENGINES[e]) lastGenEngine = e;
+    if (e === 'image' && !Image_.hasImage()) {
+      // can't show the image render without an image — open the picker and stay
+      // on a generative engine.
+      openPicker();
+      toast('insert an image');
       return;
     }
+    if (state.engine === e) { syncImageSection(); return; }
     state.engine = e;
     atlasDirty = true; // matrix needs its glyph set baked
+    if (e === 'image') Image_.invalidate();
     syncControls();
     writeHash();
-    if (e === 'image') {
-      Image_.invalidate();
-      if (!Image_.hasImage()) {
-        // selecting image with nothing loaded: open the picker rather than
-        // render a blank stage.
-        openPicker();
-        toast('insert an image');
-      }
-    }
     if (reduce) start(); // re-render the single static frame
   }
 
-  // delegated click per chip group (one listener each)
+  // delegated click per chip group (one listener each). The ENGINE tabs only
+  // carry generative engines now; clicking one switches to generative but keeps
+  // any loaded image.
   segEngine.addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn || !btn.dataset.engine) return;
@@ -1905,7 +2023,9 @@
     var img = new Image();
     img.onload = function () {
       Image_.setImage(img);
-      var switching = state.engine !== 'image';
+      // point the section's thumbnail at the loaded image + flip to the loaded
+      // state. setEngine('image') below auto-activates the image render.
+      if (thumbImg) thumbImg.src = url;
       state.engine = 'image';
       // high-fidelity defaults for a photo: auto-select the dense 'photo' ramp
       // (but only if the user is on a SHORT generative ramp — never override an
@@ -1938,10 +2058,33 @@
   }
 
   if (btnInsert) btnInsert.addEventListener('click', openPicker);
+  if (btnReplace) btnReplace.addEventListener('click', openPicker);
   if (imgFile) imgFile.addEventListener('change', function () {
     if (imgFile.files && imgFile.files[0]) loadImageFile(imgFile.files[0]);
     imgFile.value = '';   // allow re-picking the same file
   });
+
+  // clicking the thumbnail activates the image render (returns to it after you
+  // wandered off to a generative engine/Look — the image was never discarded).
+  if (btnThumb) btnThumb.addEventListener('click', function () {
+    if (Image_.hasImage()) setEngine('image');
+  });
+
+  // remove ✕ : drop the image, flip the section back to the insert state, and
+  // switch the render to the last generative engine used (donut by default).
+  function removeImage() {
+    Image_.setImage(null);
+    if (thumbImg) thumbImg.removeAttribute('src');
+    var back = GEN_ENGINES[lastGenEngine] ? lastGenEngine : 'donut';
+    state.engine = back;          // setEngine would re-open the picker for 'image'
+    atlasDirty = true;
+    syncControls();               // flips body.has-image off (no image now)
+    writeHash();                  // hash drops e=image, reverts to the generative engine
+    resize();                     // re-fit the grid for the generative engine
+    start();
+    toast('image removed');
+  }
+  if (btnRemove) btnRemove.addEventListener('click', removeImage);
 
   function setInvert(on) {
     state.invert = !!on;
@@ -2016,6 +2159,9 @@
 
   window.addEventListener('hashchange', function () {
     readHash();
+    // e=image with no loaded bytes -> fall back to a generative engine.
+    if (state.engine === 'image' && !Image_.hasImage()) state.engine = 'donut';
+    if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
     reseed();
     applyColour();
     syncControls();
@@ -2036,6 +2182,12 @@
   /* ---------- boot ---------- */
 
   readHash();
+  // a shared #e=image link references the image render but carries no image
+  // bytes (not shareable via hash). Fall back to a generative engine (donut) so
+  // we never boot to a blank stage; remember it as the last generative engine.
+  var bootImageWanted = (state.engine === 'image');
+  if (state.engine === 'image' && !Image_.hasImage()) state.engine = 'donut';
+  if (GEN_ENGINES[state.engine]) lastGenEngine = state.engine;
   reseed();
   applyColour();
   syncControls();
@@ -2043,9 +2195,8 @@
   resize();
   start();
 
-  // a shared #e=image link opens the image engine with no image bytes (they're
-  // not shareable via hash) — prompt for one instead of showing a blank stage.
-  if (state.engine === 'image' && !Image_.hasImage()) {
+  // prompt for an image if the link asked for the image render but had no bytes.
+  if (bootImageWanted && !Image_.hasImage()) {
     toast('insert an image to convert');
   }
 })();
