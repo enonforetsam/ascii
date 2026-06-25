@@ -432,6 +432,36 @@
     cursor:not-allowed;
   }
 
+  /* ---- MODE SWITCH — a top-level segmented toggle that swaps the control set.
+     body.mode-generative shows the generative-only controls (ENGINE, LOOKS, the
+     SPEED knob, the SHUFFLE action); body.mode-image shows the image-only controls
+     (the IMAGE source section + INVERT). The shared controls (CHARSET, COLOUR, the
+     CELL + CONTRAST knobs, COPY + SHARE, EXPORT) live in BOTH modes. Visibility is
+     pure display:none so there are no dead/blank gaps. ---- */
+
+  /* generative-only — hidden in image mode */
+  body.mode-image #grp-engine,
+  body.mode-image #grp-looks,
+  body.mode-image #knob-speed,
+  body.mode-image .act-shuffle{ display:none; }
+
+  /* image-only — hidden in generative mode */
+  body.mode-generative #grp-image,
+  body.mode-generative #img-invert{ display:none; }
+  /* INVERT lives inside the image-loaded block; its row wrapper must also vanish
+     in generative mode so no empty .tabs row remains. The whole #grp-image is
+     already hidden above, so this is only belt-and-braces for the inner row. */
+
+  /* In image mode the SPEED knob is gone — the knob row now holds CELL + CONTRAST.
+     The grid is 3 equal columns; with one knob removed, recentre to 2 columns so
+     the remaining dials sit balanced (no empty third column / lopsided gap). */
+  body.mode-image .knobgrid{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+
+  /* The ACTIONS group is shared (copy + share stay), but SHUFFLE is generative-
+     only. The group's .tabs is a 3-col grid; with shuffle hidden in image mode the
+     two remaining tiles must fill the row cleanly (no blank third cell). */
+  body.mode-image #grp-actions .tabs{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+
   /* ---- IMAGE SECTION — two states toggled by body.has-image ---------------
      Default (no image): show .image-empty (the "insert image" button), hide
      .image-loaded. With body.has-image: hide .image-empty, show .image-loaded
@@ -572,7 +602,21 @@
   <span class="sub">everything is characters</span>
 
   <div class="controls" role="group" aria-label="Instrument controls">
+    <!-- MODE SWITCH — top-level segmented toggle that swaps the whole control set.
+         Generative = donut/matrix/plasma engines + looks + speed + shuffle.
+         Image = the image source + invert. Driven by body.mode-image /
+         body.mode-generative (set in syncControls) so each mode shows only its
+         own controls; the shared controls (charset/colour/cell/contrast/copy/
+         share/export) live in both. The active mode = state.engine==='image'. -->
     <div class="group">
+      <span class="lab" id="lab-mode">Mode</span>
+      <div class="tabs cols2 modeswitch" id="seg-mode" role="group" aria-labelledby="lab-mode">
+        <button class="tab" id="mode-gen" data-mode="generative" type="button" aria-pressed="true" aria-label="Generative mode — donut, matrix, plasma engines">Generative</button>
+        <button class="tab" id="mode-img" data-mode="image" type="button" aria-pressed="false" aria-label="Image mode — convert a loaded image to ASCII">Image</button>
+      </div>
+    </div>
+
+    <div class="group" id="grp-engine">
       <span class="lab" id="lab-engine">Engine</span>
       <div class="tabs" role="group" aria-labelledby="lab-engine">
         <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
@@ -613,7 +657,7 @@
       <input type="file" id="img-file" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;left:-9999px" aria-hidden="true" tabindex="-1">
     </div>
 
-    <div class="group">
+    <div class="group" id="grp-charset">
       <span class="lab" id="lab-charset">Charset</span>
       <div class="tabs seg ramp" id="seg-charset" role="group" aria-labelledby="lab-charset">
         <button class="tab" data-ramp="standard" type="button" aria-pressed="true" aria-label="standard ramp">standard</button>
@@ -634,10 +678,10 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="grp-knobs">
       <span class="lab" id="lab-knobs">Motion</span>
       <div class="knobgrid">
-        <div class="knobctl">
+        <div class="knobctl knob-speed" id="knob-speed">
           <div class="knob" data-for="sl-speed" role="slider" tabindex="0" aria-label="Speed"><span class="knob-dial"></span></div>
           <input type="range" id="sl-speed" min="0" max="200" value="100" aria-label="Speed" aria-valuetext="100 percent">
           <div class="knoblabel"><span class="knm">Speed</span><span class="val" id="val-speed">100</span></div>
@@ -645,7 +689,7 @@
         <div class="knobctl">
           <div class="knob" data-for="sl-cell" role="slider" tabindex="0" aria-label="Cell size in pixels"><span class="knob-dial"></span></div>
           <input type="range" id="sl-cell" min="5" max="22" value="12" aria-label="Cell size in pixels" aria-valuetext="12 pixels">
-          <div class="knoblabel"><span class="knm">Cell</span><span class="val" id="val-cell">12</span></div>
+          <div class="knoblabel"><span class="knm" id="knm-cell">Cell</span><span class="val" id="val-cell">12</span></div>
         </div>
         <div class="knobctl">
           <div class="knob" data-for="sl-contrast" role="slider" tabindex="0" aria-label="Contrast"><span class="knob-dial"></span></div>
@@ -655,7 +699,7 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="grp-looks">
       <span class="lab" id="lab-looks">Looks</span>
       <div class="tabs seg looks cols2" id="seg-looks" role="group" aria-labelledby="lab-looks">
         <button class="tab" data-look="Neo" type="button" aria-label="Neo look">Neo</button>
@@ -667,12 +711,12 @@
       </div>
     </div>
 
-    <div class="group">
+    <div class="group" id="grp-actions">
       <span class="lab" id="lab-actions">Actions</span>
       <div class="tabs" role="group" aria-labelledby="lab-actions">
         <button class="tab" id="act-copy" type="button" aria-label="Copy frame as text (C)">copy</button>
         <button class="tab" id="act-share" type="button" aria-label="Copy share link">share</button>
-        <button class="tab" id="act-shuffle" type="button" aria-label="Shuffle the seed">shuffle</button>
+        <button class="tab act-shuffle" id="act-shuffle" type="button" aria-label="Shuffle the seed">shuffle</button>
       </div>
     </div>
 
@@ -1649,6 +1693,11 @@
 
   /* ---------- control wiring ---------- */
 
+  var segMode    = document.getElementById('seg-mode');
+  var modeGen    = document.getElementById('mode-gen');
+  var modeImg    = document.getElementById('mode-img');
+  var labCharset = document.getElementById('lab-charset');
+  var knmCell    = document.getElementById('knm-cell');
   var segEngine  = document.querySelector('.tabs[aria-labelledby="lab-engine"]');
   var segCharset = document.getElementById('seg-charset');
   var segColour  = document.getElementById('seg-colour');
@@ -1873,6 +1922,18 @@
   }
 
   function syncControls() {
+    // TOP-LEVEL MODE: image render => image mode, else generative. Drive the body
+    // class (CSS swaps the control set) + the mode toggle's pressed state.
+    var imageMode = (state.engine === 'image');
+    document.body.classList.toggle('mode-image', imageMode);
+    document.body.classList.toggle('mode-generative', !imageMode);
+    if (modeGen) modeGen.setAttribute('aria-pressed', imageMode ? 'false' : 'true');
+    if (modeImg) modeImg.setAttribute('aria-pressed', imageMode ? 'true' : 'false');
+    // optional clarity touch: in image mode the shared CHARSET/CELL read as
+    // Ramp/Detail (they're acting on the image), else their generative names.
+    if (labCharset) labCharset.textContent = imageMode ? 'Ramp' : 'Charset';
+    if (knmCell) knmCell.textContent = imageMode ? 'Detail' : 'Cell';
+
     // the ENGINE tabs are generative-only; mark the active engine, or none when
     // the image render is active (so no generative tab reads as pressed).
     setPressed(segEngine, 'data-engine', state.engine === 'image' ? null : state.engine);
@@ -1907,6 +1968,44 @@
     writeHash();
     if (reduce) start(); // re-render the single static frame
   }
+
+  /* ---------- MODE SWITCH wiring ----------
+     The top-level toggle swaps the whole control set. "Generative" returns to the
+     last generative engine (donut default), KEEPING any loaded image. "Image"
+     enters image mode: if an image is loaded it renders; if NOT it shows the
+     image section's insert state + a hint toast — it never auto-opens the file
+     picker (only the explicit "insert" button does), so the canvas may sit empty
+     until an image is inserted. */
+  function enterGenerativeMode() {
+    var back = GEN_ENGINES[lastGenEngine] ? lastGenEngine : 'donut';
+    setEngine(back);
+  }
+  function enterImageMode() {
+    if (Image_.hasImage()) {
+      setEngine('image');               // renders the loaded image
+      return;
+    }
+    // no image yet: switch to image mode WITHOUT opening the picker. Set the
+    // engine directly (setEngine('image') would pop the picker) and show the
+    // insert state + a hint.
+    if (state.engine !== 'image') {
+      state.engine = 'image';
+      atlasDirty = true;
+      Image_.invalidate();
+      syncControls();                   // flips body.mode-image, shows insert state
+      writeHash();
+    } else {
+      syncControls();
+    }
+    if (reduce) start();                // re-render (canvas may be empty)
+    toast('insert an image to convert');
+  }
+  if (segMode) segMode.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.mode) return;
+    if (btn.dataset.mode === 'image') enterImageMode();
+    else enterGenerativeMode();
+  });
 
   // delegated click per chip group (one listener each). The ENGINE tabs only
   // carry generative engines now; clicking one switches to generative but keeps
