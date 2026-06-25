@@ -48,3 +48,43 @@ test('index.html is self-contained and on-brand', () => {
     'no external CDN/font references'
   );
 });
+
+test('the inline script parses (Function constructor)', () => {
+  const html = read('index.html');
+  const body = html.match(/<script>([\s\S]*)<\/script>/)[1];
+  assert.doesNotThrow(() => new Function(body), 'inline script must parse');
+});
+
+test('M2: full-state hash keys are wired', () => {
+  const html = read('index.html');
+  // readHash handles every key
+  for (const k of ["'e'", "'c'", "'k'", "'sp'", "'ce'", "'ct'", "'sd'"]) {
+    assert.ok(html.includes(k), `readHash/writeHash references ${k}`);
+  }
+  // append-only: legacy single-key hashes still present in writer order
+  assert.match(html, /\['e', 'c', 'k', 'sp', 'ce', 'ct', 'sd'\]/);
+});
+
+test('M2: studio superpowers present', () => {
+  const html = read('index.html');
+  assert.match(html, /function gridToText\(/, 'gridToText exists');
+  assert.match(html, /function gridToAnsi\(/, 'ANSI export exists');
+  assert.match(html, /\\x1b\[38;2;/, 'ANSI truecolor escape');
+  assert.match(html, /function mulberry32\(/, 'seeded PRNG exists');
+  assert.match(html, /canvas\.captureStream/, 'webm capture');
+  assert.match(html, /new MediaRecorder/, 'MediaRecorder used');
+  assert.match(html, /toBlob\(/, 'png export');
+  assert.match(html, /navigator\.clipboard/, 'clipboard copy');
+  assert.match(html, /execCommand\('copy'\)/, 'clipboard fallback');
+});
+
+test('M2: LOOKS / ACTIONS / EXPORT groups + toast in the rail', () => {
+  const html = read('index.html');
+  for (const id of ['seg-looks', 'act-copy', 'act-share', 'act-shuffle',
+                    'exp-txt', 'exp-ans', 'exp-png', 'exp-rec', 'id="toast"']) {
+    assert.ok(html.includes(id), `markup includes ${id}`);
+  }
+  for (const look of ['Neo', 'Solaris', 'Blueprint', 'Mono', 'Signal', 'Ember']) {
+    assert.ok(html.includes('data-look="' + look + '"'), `look chip ${look}`);
+  }
+});

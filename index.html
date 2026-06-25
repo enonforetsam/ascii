@@ -321,8 +321,64 @@
     opacity:var(--scan-op);
   }
 
+  /* record button — active recording state pulses a red dot */
+  .tab.recording{
+    border-color:#ff4d4d;
+    color:#ff8a8a;
+    box-shadow:0 0 8px rgba(255,77,77,.5);
+  }
+  .tab.recording::before{
+    content:"";
+    display:inline-block;
+    width:7px;height:7px;
+    margin-right:6px;
+    border-radius:50%;
+    background:#ff4d4d;
+    box-shadow:0 0 6px #ff4d4d;
+    vertical-align:.04em;
+    animation:recpulse .9s ease-in-out infinite;
+  }
+  @keyframes recpulse{50%{opacity:.25}}
+  .tab[aria-disabled="true"], .tab:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
+
+  /* TOAST — self-contained, theme-coloured, fades after ~1.6s */
+  .toast{
+    position:fixed;
+    left:calc(var(--panel-w) + 50%);
+    transform:translate(-50%, 12px);
+    bottom:34px;
+    z-index:6;
+    max-width:min(80vw,360px);
+    padding:8px 14px;
+    font-size:12px;
+    letter-spacing:.08em;
+    color:var(--ink);
+    background:rgba(var(--bg-rgb),.92);
+    border:1px solid var(--ink);
+    border-radius:3px;
+    box-shadow:var(--ctl-glow);
+    text-shadow:none;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .18s ease, transform .18s ease;
+  }
+  .toast.show{
+    opacity:1;
+    transform:translate(-50%, 0);
+  }
+  body.barhidden .toast{ left:50%; }
+  @media (max-width:680px){ .toast{ left:50%; } }
+
   @media (prefers-reduced-motion: reduce){
     .wordmark .blip{animation:none}
+    .tab.recording::before{animation:none}
+    .toast{transition:none}
   }
 
   /* MOBILE — the rail becomes a full-width top strip (a translucent overlay) over
@@ -397,6 +453,37 @@
       </div>
     </div>
 
+    <div class="group">
+      <span class="lab" id="lab-looks">Looks</span>
+      <div class="tabs seg looks" id="seg-looks" role="group" aria-labelledby="lab-looks">
+        <button class="tab" data-look="Neo" type="button" aria-label="Neo look">Neo</button>
+        <button class="tab" data-look="Solaris" type="button" aria-label="Solaris look">Solaris</button>
+        <button class="tab" data-look="Blueprint" type="button" aria-label="Blueprint look">Blueprint</button>
+        <button class="tab" data-look="Mono" type="button" aria-label="Mono look">Mono</button>
+        <button class="tab" data-look="Signal" type="button" aria-label="Signal look">Signal</button>
+        <button class="tab" data-look="Ember" type="button" aria-label="Ember look">Ember</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="lab" id="lab-actions">Actions</span>
+      <div class="tabs" role="group" aria-labelledby="lab-actions">
+        <button class="tab" id="act-copy" type="button" aria-label="Copy frame as text (C)">copy</button>
+        <button class="tab" id="act-share" type="button" aria-label="Copy share link">share</button>
+        <button class="tab" id="act-shuffle" type="button" aria-label="Shuffle the seed">shuffle</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="lab" id="lab-export">Export</span>
+      <div class="tabs" role="group" aria-labelledby="lab-export">
+        <button class="tab" id="exp-txt" type="button" aria-label="Download as plain text">txt</button>
+        <button class="tab" id="exp-ans" type="button" aria-label="Download as ANSI colour text">ans</button>
+        <button class="tab" id="exp-png" type="button" aria-label="Download as PNG image">png</button>
+        <button class="tab" id="exp-rec" type="button" aria-pressed="false" aria-label="Record a WebM clip">rec</button>
+      </div>
+    </div>
+
     <button class="btn" id="btn-hide" type="button" aria-pressed="false" aria-label="Hide control bar for a clean view">hide</button>
   </div>
 </header>
@@ -404,11 +491,13 @@
 <button class="btn reveal" id="btn-show" type="button" aria-label="Show control bar">controls</button>
 
 <footer>
-  <span>M1 · donut / matrix / plasma</span>
+  <span>M2 · copy · share · export · looks</span>
   <span>ascii.krackeddevs.com</span>
 </footer>
 
 <div class="scanlines" aria-hidden="true"></div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -449,8 +538,36 @@
     colour:  'phosphor',
     speed:   1.0,    // 0..2 multiplier
     cell:    12,     // logical px per cell
-    contrast:1.0     // 0.4..2.2 gamma-ish multiplier
+    contrast:1.0,    // 0.4..2.2 gamma-ish multiplier
+    seed:    0        // integer; feeds the seeded PRNG for reproducible variation
   };
+
+  // DEFAULTS — the canonical baseline. writeHash() trims any key equal to its
+  // default so share links stay short and back-compatible with old #e=&c=&k=.
+  var DEFAULTS = {
+    engine:  'donut',
+    charset: 'standard',
+    colour:  'phosphor',
+    speed:   100,    // hash units (percent)
+    cell:    12,
+    contrast:100,    // hash units (percent)
+    seed:    0
+  };
+
+  /* ---------- seeded PRNG (mulberry32) — best-effort reproducibility ---------
+     A small deterministic generator so the same state.seed reproduces the same
+     matrix rain / engine phase. rng() yields a fresh function from the current
+     seed; engines pull from it so re-seeding gives a stable, repeatable look. */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  var rng = mulberry32(0);            // active seeded generator (re-made on reseed)
+  function reseed() { rng = mulberry32(state.seed | 0); }
 
   // grid + reusable typed arrays (the character buffer — source of truth)
   var dpr = 1, cw = 12, ch = 12, cols = 0, rows = 0, gridN = 0;
@@ -573,8 +690,11 @@
     // accelerating its spin.
     function render(dt, tiltX, tiltY) {
       simT += dt;
-      var A = simT * 0.9 + tiltY * 2.4;
-      var B = simT * 0.45 + tiltX * 2.4;
+      // seed gives a stable phase offset so different seeds spin to a
+      // different-but-reproducible orientation (variation without chaos).
+      var sphase = (state.seed | 0) * 0.123;
+      var A = simT * 0.9 + tiltY * 2.4 + sphase;
+      var B = simT * 0.45 + tiltX * 2.4 + sphase * 0.5;
 
       // clear buffers
       lum.fill(0);
@@ -649,6 +769,9 @@
     var cap = 0;
 
     function reset() {
+      // re-seed the PRNG so the rain pattern is reproducible from state.seed:
+      // the same seed reproduces the same heads/speeds/tails/glyph picks.
+      reseed();
       cap = cols;
       head = new Float32Array(cap);
       spd  = new Float32Array(cap);
@@ -664,12 +787,13 @@
       // initial (stagger) heads scatter across the WHOLE screen (small overscan
       // above), so reset() pre-fills a dense, full-height field within ~1s of
       // load instead of dribbling in from offscreen. Recycle reseeds just above.
-      head[c] = stagger ? (Math.random() * (rows + 12) - 6) : -Math.random() * 6;
-      spd[c]  = 8 + Math.random() * 18;          // cells/sec
-      len[c]  = 14 + (Math.random() * 26) | 0;   // tail length (14..40)
+      // All randomness flows through the seeded rng() for reproducibility.
+      head[c] = stagger ? (rng() * (rows + 12) - 6) : -rng() * 6;
+      spd[c]  = 8 + rng() * 18;          // cells/sec
+      len[c]  = 14 + (rng() * 26) | 0;   // tail length (14..40)
     }
     function randGlyph() {
-      return MATRIX_GLYPHS.charCodeAt((Math.random() * MATRIX_GLYPHS.length) | 0);
+      return MATRIX_GLYPHS.charCodeAt((rng() * MATRIX_GLYPHS.length) | 0);
     }
 
     function render(dt) {
@@ -702,7 +826,7 @@
             // persistent identity: head always mutates; the tail keeps its
             // standing glyph and only occasionally flips (~1.2%), so streams
             // stay stable across frames instead of shimmering all-new each frame.
-            if (t === 0 || Math.random() < 0.012) mGlyphCol[idx] = randGlyph();
+            if (t === 0 || rng() < 0.012) mGlyphCol[idx] = randGlyph();
             glyph[idx] = mGlyphCol[idx];
           }
         }
@@ -727,7 +851,8 @@
       phase += dt;
       glyph.fill(0); // ramp-driven, no forced glyphs
 
-      var t = phase;
+      // seed-derived phase offset: stable per-seed variation of the field.
+      var t = phase + (state.seed | 0) * 0.123;
       var a = 0.21, b = 0.17, cc = 0.13, d = 0.20;
       var cx = cols * 0.5, cy = rows * 0.5;
       var pgx = pointer.active ? pointer.gx : -999;
@@ -816,6 +941,187 @@
     ctx.globalAlpha = 1;
   }
 
+  /* ====================================================================
+     COPY-AS-TEXT + EXPORTS — the headline superpower. The character buffer
+     (lum[]/glyph[]) is the source of truth, so the grid IS real text.
+     ==================================================================== */
+
+  function clamp01(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+  // walk the current grid -> a plain-text string (trailing whitespace trimmed
+  // per row, rows joined by newlines). ramp index 0 == blank/space.
+  function gridToText() {
+    var ramp = rampString();
+    var rampLen = ramp.length;
+    var out = [];
+    for (var y = 0; y < rows; y++) {
+      var line = '';
+      for (var x = 0; x < cols; x++) {
+        var idx = y * cols + x;
+        var cp = glyph[idx];
+        var chr;
+        if (cp) {
+          chr = String.fromCodePoint(cp);
+        } else {
+          var ri = Math.floor(clamp01(lum[idx]) * rampLen);
+          if (ri < 0) ri = 0; if (ri > rampLen - 1) ri = rampLen - 1;
+          chr = ramp.charAt(ri);
+        }
+        line += chr;
+      }
+      out.push(line.replace(/\s+$/, ''));
+    }
+    return out.join('\n');
+  }
+
+  // ANSI-coloured text: per cell emit \x1b[38;2;R;G;Bm scaled by brightness so
+  // the glow survives; reset each line + the whole file.
+  function gridToAnsi() {
+    var ramp = rampString();
+    var rampLen = ramp.length;
+    var ink = COLOURS[state.colour].ink;
+    var out = '';
+    for (var y = 0; y < rows; y++) {
+      var line = '';
+      for (var x = 0; x < cols; x++) {
+        var idx = y * cols + x;
+        var v = clamp01(lum[idx]);
+        var cp = glyph[idx];
+        var chr;
+        if (cp) {
+          chr = String.fromCodePoint(cp);
+        } else {
+          var ri = Math.floor(v * rampLen);
+          if (ri < 0) ri = 0; if (ri > rampLen - 1) ri = rampLen - 1;
+          chr = ramp.charAt(ri);
+        }
+        var b = 0.35 + 0.65 * v;
+        var r = Math.round(ink[0] * b), g = Math.round(ink[1] * b), bl = Math.round(ink[2] * b);
+        line += '\x1b[38;2;' + r + ';' + g + ';' + bl + 'm' + chr;
+      }
+      out += line + '\x1b[0m\n';
+    }
+    return out + '\x1b[0m';
+  }
+
+  function stamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+           p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function fname(ext) { return 'ascii-' + state.engine + '-' + stamp() + '.' + ext; }
+
+  function downloadBlob(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function copyText(str, okMsg) {
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = str;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) toast(okMsg); else toast('copy failed');
+      } catch (e) { toast('copy failed'); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(str).then(function () { toast(okMsg); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function doCopy() {
+    copyText(gridToText(), 'copied ' + cols + 'x' + rows);
+  }
+  function doShare() {
+    // ensure the hash reflects full state NOW (skip the debounce), then copy.
+    window.clearTimeout(hashWriteTimer);
+    var h = buildHash();
+    if (location.hash !== h) history.replaceState(null, '', h);
+    copyText(location.href, 'link copied');
+  }
+  function doShuffle() {
+    state.seed = (Math.random() * 0x7fffffff) | 0;
+    reseed();
+    Matrix.reset();
+    Donut.reset();
+    syncControls();
+    writeHash();
+    start(); // repaint (reduced-motion has no rAF loop)
+    toast('shuffled · seed ' + state.seed);
+  }
+  function exportTxt() {
+    downloadBlob(new Blob([gridToText()], { type: 'text/plain' }), fname('txt'));
+    toast('saved .txt');
+  }
+  function exportAns() {
+    downloadBlob(new Blob([gridToAnsi()], { type: 'text/plain' }), fname('ans'));
+    toast('saved .ans');
+  }
+  function exportPng() {
+    canvas.toBlob(function (blob) {
+      if (!blob) { toast('png failed'); return; }
+      downloadBlob(blob, fname('png'));
+      toast('saved .png');
+    }, 'image/png');
+  }
+
+  /* ---------- WEBM recording ---------- */
+  var REC_SUPPORTED = !!(typeof MediaRecorder !== 'undefined' &&
+                         canvas.captureStream && window.Blob && window.URL);
+  var mediaRec = null, recChunks = null, recTimer = 0, recording = false;
+
+  function startRec() {
+    if (!REC_SUPPORTED) { toast('recording unavailable'); return; }
+    try {
+      var stream = canvas.captureStream(30);
+      recChunks = [];
+      mediaRec = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      mediaRec.ondataavailable = function (ev) {
+        if (ev.data && ev.data.size > 0) recChunks.push(ev.data);
+      };
+      mediaRec.onstop = function () {
+        var blob = new Blob(recChunks, { type: 'video/webm' });
+        downloadBlob(blob, fname('webm'));
+        toast('saved .webm');
+        recChunks = null;
+      };
+      mediaRec.start();
+      recording = true;
+      setRecUI(true);
+      toast('recording…');
+      // safety auto-stop ~15s
+      recTimer = window.setTimeout(stopRec, 15000);
+    } catch (e) {
+      toast('recording failed');
+      recording = false;
+      setRecUI(false);
+    }
+  }
+  function stopRec() {
+    window.clearTimeout(recTimer);
+    if (mediaRec && recording) {
+      try { mediaRec.stop(); } catch (e) {}
+    }
+    recording = false;
+    setRecUI(false);
+  }
+  function toggleRec() { if (recording) stopRec(); else startRec(); }
+
   /* ---------- main loop ---------- */
 
   var rafId = 0, last = 0;
@@ -880,9 +1186,21 @@
     atlasDirty = true;
   }
 
-  /* ---------- URL hash wiring: #e=engine&c=charset&k=colour ---------- */
+  /* ---------- URL hash wiring — FULL-STATE share hash (append-only) ----------
+     keys: e=engine c=charset k=colour sp=speed(0..200) ce=cell(7..22)
+           ct=contrast(40..220) sd=seed(integer). readHash() reads ALL keys with
+     current defaults when absent; writeHash() writes the full state but TRIMS
+     any key equal to its default, so old #e=&c=&k= links still load and new
+     links stay short + back-compatible. */
 
   var charsetFromHash = false; // did the URL explicitly pin a ramp?
+
+  function clampInt(v, lo, hi) {
+    v = parseInt(v, 10);
+    if (!isFinite(v)) return null;
+    if (v < lo) v = lo; if (v > hi) v = hi;
+    return v;
+  }
 
   function readHash() {
     var h = (location.hash || '').replace(/^#/, '');
@@ -896,20 +1214,47 @@
     for (var i = 0; i < parts.length; i++) {
       var kv = parts[i].split('=');
       var k = kv[0], val = kv[1];
-      if (k === 'e' && CHARSETS && (val === 'donut' || val === 'matrix' || val === 'plasma')) state.engine = val;
+      if (k === 'e' && (val === 'donut' || val === 'matrix' || val === 'plasma')) state.engine = val;
       else if (k === 'c' && CHARSETS[val]) { state.charset = val; charsetFromHash = true; }
       else if (k === 'k' && COLOURS[val]) state.colour = val;
+      else if (k === 'sp') { var sp = clampInt(val, 0, 200); if (sp !== null) state.speed = sp / 100; }
+      else if (k === 'ce') { var ce = clampInt(val, 7, 22); if (ce !== null) state.cell = ce; }
+      else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
+      else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
     }
     // donut with no explicit ramp -> canonical donut ramp
     if (state.engine === 'donut' && !charsetFromHash) state.charset = 'donut';
   }
 
   var hashWriteTimer = 0;
+  function buildHash() {
+    // current full state in hash units; trim any key equal to its default.
+    var sp = Math.round(state.speed * 100);
+    var ct = Math.round(state.contrast * 100);
+    var cur = {
+      e:  state.engine,
+      c:  state.charset,
+      k:  state.colour,
+      sp: sp,
+      ce: state.cell,
+      ct: ct,
+      sd: state.seed | 0
+    };
+    var def = { e:DEFAULTS.engine, c:DEFAULTS.charset, k:DEFAULTS.colour,
+                sp:DEFAULTS.speed, ce:DEFAULTS.cell, ct:DEFAULTS.contrast, sd:DEFAULTS.seed };
+    var order = ['e', 'c', 'k', 'sp', 'ce', 'ct', 'sd'];
+    var out = [];
+    for (var i = 0; i < order.length; i++) {
+      var key = order[i];
+      if (cur[key] !== def[key]) out.push(key + '=' + cur[key]);
+    }
+    return out.length ? '#' + out.join('&') : '#';
+  }
   function writeHash() {
     window.clearTimeout(hashWriteTimer);
     hashWriteTimer = window.setTimeout(function () {
-      var h = '#e=' + state.engine + '&c=' + state.charset + '&k=' + state.colour;
-      if (location.hash !== h) {
+      var h = buildHash();
+      if (location.hash !== h && !(h === '#' && !location.hash)) {
         history.replaceState(null, '', h);
       }
     }, 120);
@@ -928,6 +1273,65 @@
   var valContrast= document.getElementById('val-contrast');
   var btnHide    = document.getElementById('btn-hide');
   var btnShow    = document.getElementById('btn-show');
+  var segLooks   = document.getElementById('seg-looks');
+  var btnCopy    = document.getElementById('act-copy');
+  var btnShare   = document.getElementById('act-share');
+  var btnShuffle = document.getElementById('act-shuffle');
+  var btnTxt     = document.getElementById('exp-txt');
+  var btnAns     = document.getElementById('exp-ans');
+  var btnPng     = document.getElementById('exp-png');
+  var btnRec     = document.getElementById('exp-rec');
+  var toastEl    = document.getElementById('toast');
+
+  /* ---------- toast: self-contained, theme-coloured, fades after ~1.6s ---- */
+  var toastTimer = 0;
+  function toast(msg) {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      toastEl.classList.remove('show');
+    }, 1600);
+  }
+
+  /* ---------- record button active state ---------- */
+  function setRecUI(on) {
+    if (!btnRec) return;
+    btnRec.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btnRec.textContent = on ? '■ stop' : 'rec';
+    btnRec.classList.toggle('recording', !!on);
+  }
+
+  /* ---------- LOOKS: one-tap curated configs ---------- */
+  var LOOKS = {
+    Neo:       { e:'matrix', k:'phosphor', sp:120, ce:12, sd:0 },
+    Solaris:   { e:'donut',  c:'donut',    k:'amber',    sp:90,  ce:11, sd:0 },
+    Blueprint: { e:'plasma', c:'blocks',   k:'paper',    sp:80,  ce:12, sd:0 },
+    Mono:      { e:'donut',  c:'standard', k:'paper',    sp:70,  ce:10, sd:0 },
+    Signal:    { e:'plasma', c:'binary',   k:'phosphor', sp:140, ce:10, sd:0 },
+    Ember:     { e:'matrix', c:'standard', k:'amber',    sp:100, ce:12, sd:0 }
+  };
+  function applyPreset(name) {
+    var p = LOOKS[name];
+    if (!p) return;
+    state.engine   = p.e;
+    if (p.c) state.charset = p.c;
+    else state.charset = (p.e === 'donut') ? 'donut' : 'standard';
+    state.colour   = p.k;
+    state.speed    = p.sp / 100;
+    state.cell     = p.ce;
+    state.seed     = (p.sd | 0);
+    reseed();
+    atlasDirty = true;
+    applyColour();
+    syncControls();
+    if (segLooks) setPressed(segLooks, 'data-look', name);
+    resize();        // cell may have changed
+    writeHash();
+    start();
+    toast('look · ' + name);
+  }
 
   // mark the active button (aria-pressed) within a delegated chip group
   function setPressed(groupEl, attr, value) {
@@ -1004,6 +1408,7 @@
     state.speed = (+slSpeed.value) / 100;
     slSpeed.setAttribute('aria-valuetext', slSpeed.value + ' percent');
     valSpeed.textContent = slSpeed.value;
+    writeHash();
     if (reduce) start();
   });
 
@@ -1012,6 +1417,7 @@
     slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
     valCell.textContent = state.cell;
     resize();
+    writeHash();
     if (reduce) start();
   });
 
@@ -1019,6 +1425,7 @@
     state.contrast = (+slContrast.value) / 100;
     slContrast.setAttribute('aria-valuetext', slContrast.value + ' percent');
     valContrast.textContent = slContrast.value;
+    writeHash();
     if (reduce) start();
   });
 
@@ -1038,6 +1445,37 @@
   }
   btnHide.addEventListener('click', hideBar);
   btnShow.addEventListener('click', showBar);
+
+  /* ---------- LOOKS / ACTIONS / EXPORT wiring ---------- */
+  if (segLooks) segLooks.addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn || !btn.dataset.look) return;
+    applyPreset(btn.dataset.look);
+  });
+  if (btnCopy)    btnCopy.addEventListener('click', doCopy);
+  if (btnShare)   btnShare.addEventListener('click', doShare);
+  if (btnShuffle) btnShuffle.addEventListener('click', doShuffle);
+  if (btnTxt)     btnTxt.addEventListener('click', exportTxt);
+  if (btnAns)     btnAns.addEventListener('click', exportAns);
+  if (btnPng)     btnPng.addEventListener('click', exportPng);
+  if (btnRec) {
+    if (!REC_SUPPORTED) {
+      btnRec.disabled = true;
+      btnRec.setAttribute('aria-disabled', 'true');
+      btnRec.title = 'recording unavailable in this browser';
+    } else {
+      btnRec.addEventListener('click', toggleRec);
+    }
+  }
+
+  // 'C' copies the grid as text (ignored while typing / with modifiers)
+  window.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'c' && ev.key !== 'C') return;
+    if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var t = ev.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+    doCopy();
+  });
 
   // 'H' toggles the control bar (ignored while typing in a form control)
   window.addEventListener('keydown', function (ev) {
@@ -1065,10 +1503,12 @@
 
   window.addEventListener('hashchange', function () {
     readHash();
+    reseed();
     applyColour();
     syncControls();
     resize();
     if (reduce) start();
+    else start();
   });
 
   var resizeTimer = 0;
@@ -1083,6 +1523,7 @@
   /* ---------- boot ---------- */
 
   readHash();
+  reseed();
   applyColour();
   syncControls();
   writeHash();
