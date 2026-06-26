@@ -1252,8 +1252,15 @@
     canvas.width  = Math.max(1, Math.floor(w * dpr));
     canvas.height = Math.max(1, Math.floor(h * dpr));
 
-    cw = state.cell;
+    // Cells render at the MONOSPACE aspect: the Detail knob controls cell HEIGHT,
+    // and the WIDTH is CHAR_ASPECT * height (a glyph is ~half as wide as it is
+    // tall). Every engine + image + words samples assuming this 0.5 char aspect,
+    // so matching the on-screen cell shape to it makes the rendering proportioned
+    // (round donut, un-stretched image) instead of ~2x horizontally stretched.
+    // cw is clamped >= 2 so a fine Detail setting can't explode the column count.
+    var CELL_ASPECT = 0.5;            // glyph width / height (matches samplers)
     ch = state.cell;
+    cw = Math.max(2, Math.round(state.cell * CELL_ASPECT));
     cols = Math.max(1, Math.ceil(w / cw));
     rows = Math.max(1, Math.ceil(h / ch));
     gridN = cols * rows;
