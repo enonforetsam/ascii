@@ -106,61 +106,59 @@
     padding:18px 16px 14px;
     overflow-y:auto;
     overscroll-behavior:contain;
-    /* LIGHT brushed-metal instrument faceplate — visually identical to Fluid's
-       control panel (Fluid .panel, ~line 46). A fixed neutral light-metal panel,
-       decoupled from the art theme: override the colour tokens locally to Fluid's
-       LIGHT palette so every control resolves DARK-ink-on-light-metal, while the
-       stage/art keeps the active theme. Ports Fluid's --panel-metal #d8d8d5, its
-       --ink #101010, --line and --accent #f5bdc9 verbatim. */
-    --ink:#101010;
-    --ink-rgb:16,16,16;
-    --ink-dim:rgba(16,16,16,.58);
-    --glow:none;
-    --ctl-glow:none;
-    --line:rgba(16,16,16,.16);
-    --accent:#f5bdc9;
-    --panel-metal:#d8d8d5;
+    /* CYBERPUNK / MATRIX TECH-HUD DATAPAD faceplate — a near-black charcoal panel
+       with a faint circuit/grid texture, neon-green primary glow + cyan secondary
+       hairlines, and an angular HUD framing. Override the colour tokens locally to a
+       DARK terminal palette so every control resolves NEON-GREEN-on-charcoal, while
+       the stage/art keeps the active theme. Primary accent = phosphor green #39ff6a,
+       secondary = cyan #38e8ff. */
+    --ink:#caffd8;                         /* bright terminal text */
+    --ink-rgb:202,255,216;
+    --ink-dim:rgba(110,255,160,.62);       /* dimmed neon-green */
+    --neon:#39ff6a;                        /* primary phosphor green */
+    --neon-rgb:57,255,106;
+    --cyan:#38e8ff;                        /* secondary cyan hairline */
+    --glow:0 0 6px rgba(57,255,106,.5);
+    --ctl-glow:0 0 8px rgba(57,255,106,.4);
+    --line:rgba(57,255,106,.22);
+    --accent:#39ff6a;
+    --panel-metal:#05080a;
     color:var(--ink);
-    text-shadow:none;
-    /* MACHINED-METAL FACEPLATE — a real premium-instrument plate. Background stack,
-       top to bottom:
-        (1) large soft DIAGONAL SHEEN — a hint of an environment/light sweep across
-            the brushed surface (off-axis, warm at the lower pass),
-        (2) top-right environment catch + bottom-left warm shade,
-        (3) FINE ANISOTROPIC BRUSHED GRAIN — a tight low-contrast vertical repeating
-            gradient (the milling direction) so the plate reads as brushed metal,
-        (4) a faintly warm vertical METAL gradient lit from above.
-       box-shadow: a TOP-EDGE catch-light + bright left bevel + a BOTTOM inner shade,
-       and a soft drop over the dark stage; a hairline warm border divides them. */
+    text-shadow:0 0 5px rgba(57,255,106,.18);
+    /* Dark charcoal base + a faint circuit grid (two crossed repeating gradients) +
+       a top neon-green wash and a corner cyan wash, with a glowing green border-right
+       so the panel reads as a lit HUD beside the dark matrix stage. */
     background-color:var(--panel-metal);
     background-image:
-      linear-gradient(118deg,
-        rgba(255,255,255,0) 0%, rgba(255,255,255,.30) 15%, rgba(255,255,255,0) 33%,
-        rgba(255,255,255,0) 63%, rgba(255,252,244,.16) 80%, rgba(255,255,255,0) 100%),
-      radial-gradient(140% 70% at 100% -4%, rgba(255,255,255,.58), rgba(255,255,255,0) 46%),
-      radial-gradient(120% 80% at 0% 104%, rgba(86,70,40,.10), rgba(86,70,40,0) 52%),
-      repeating-linear-gradient(90deg,
-        rgba(255,255,255,.22) 0, rgba(255,255,255,.22) .5px,
-        rgba(120,124,132,.05) 1px, rgba(120,124,132,.05) 1.5px,
-        rgba(255,255,255,.10) 2px, rgba(70,76,86,.06) 3px),
-      linear-gradient(180deg, #ecede9 0%, #d9dad5 30%, #cdccc5 62%, #bdbcb3 100%);
-    border-right:1px solid rgba(60,52,32,.30);
+      radial-gradient(120% 70% at 50% -8%, rgba(57,255,106,.10), rgba(57,255,106,0) 46%),
+      radial-gradient(90% 70% at 100% 100%, rgba(56,232,255,.07), rgba(56,232,255,0) 50%),
+      repeating-linear-gradient(90deg, rgba(57,255,106,.045) 0, rgba(57,255,106,.045) 1px, transparent 1px, transparent 24px),
+      repeating-linear-gradient(0deg, rgba(57,255,106,.045) 0, rgba(57,255,106,.045) 1px, transparent 1px, transparent 24px),
+      linear-gradient(180deg, #070b0d 0%, #04070a 60%, #030506 100%);
+    border-right:1px solid rgba(57,255,106,.35);
     box-shadow:
-      inset 0 2px 0 rgba(255,255,255,.85),
-      inset 1px 0 0 rgba(255,255,255,.7),
-      inset 0 -22px 40px rgba(56,48,30,.12),
-      inset -16px 0 30px rgba(40,36,24,.07),
-      6px 0 18px rgba(0,0,0,.22);
+      inset -22px 0 40px rgba(0,0,0,.55),
+      inset -1px 0 0 rgba(57,255,106,.18),
+      inset 1px 0 14px rgba(57,255,106,.10);
   }
+  /* faint HUD scanline overlay on the faceplate, behind the controls */
+  .topbar::before{
+    content:"";
+    position:absolute;
+    left:0;right:0;top:0;bottom:0;
+    pointer-events:none;
+    z-index:0;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(57,255,106,.04) 3px, rgba(57,255,106,.04) 4px);
+  }
+  .topbar > *{ position:relative; z-index:1; }
 
-  /* ---- SCREWS — small domed metal fasteners recessed into the faceplate corners
-     (+ flanking the wordmark). Pure CSS: a domed brushed-brass head via a
-     radial-gradient with a top-left specular highlight, a straight slot (::before),
-     a recessed socket rim + a bright bevel of the recess + a drop shadow so each
-     sits IN the plate. Decorative (aria-hidden, pointer-events:none); injected by
-     JS so the markup + tests stay untouched. Positioned for desktop rail corners
+  /* ---- HUD CORNER BRACKETS — angular glowing-green frame markers pinned to the
+     faceplate corners (replacing the old brass corner screws). Pure CSS: each is an
+     L-shaped angle built from a top/side border that glows, reading as a datapad /
+     targeting-reticle frame. Decorative (aria-hidden, pointer-events:none); injected
+     by JS so the markup + tests stay untouched. Positioned for desktop rail corners
      AND mobile sheet corners via .tl/.tr/.bl/.br. */
-  /* a fixed, non-scrolling overlay matching the rail so the corner screws stay
+  /* a fixed, non-scrolling overlay matching the rail so the corner brackets stay
      pinned to the visible faceplate (the .topbar itself scrolls internally). */
   .screwlayer{
     position:fixed;
@@ -173,45 +171,45 @@
   .screw{
     position:absolute;
     width:13px;height:13px;
-    border-radius:50%;
     z-index:6;
     pointer-events:none;
-    background:
-      radial-gradient(circle at 36% 30%, #f6e9bd 0%, #ddc079 24%, #b9953f 52%, #8c6e2b 78%, #6e5320 100%);
-    box-shadow:
-      inset 0 1px 1px rgba(255,248,220,.85),
-      inset 0 -2px 3px rgba(60,42,12,.6),
-      inset 0 0 0 1.4px rgba(74,56,24,.5),
-      0 0 0 1px rgba(255,255,255,.55),
-      0 1.5px 2px rgba(0,0,0,.42);
+    background:transparent;
+    /* the inner-facing two edges of an L bracket; the .tl/.tr/.bl/.br variants
+       reorient which two edges glow so each angle hugs its corner. */
+    border-top:1.5px solid rgba(57,255,106,.7);
+    border-left:1.5px solid rgba(57,255,106,.7);
+    filter:drop-shadow(0 0 3px rgba(57,255,106,.6));
   }
+  /* a tiny cyan rivet dot tucked into the elbow of each bracket */
   .screw::before{
     content:"";
     position:absolute;
-    left:50%;top:50%;
-    width:9px;height:2px;
-    border-radius:1px;
-    transform:translate(-50%,-50%) rotate(34deg);
-    background:linear-gradient(180deg, rgba(40,28,8,.82) 0%, rgba(40,28,8,.85) 55%, rgba(255,246,214,.5) 100%);
-    box-shadow:0 1px 0 rgba(255,248,220,.3);
+    left:1px;top:1px;
+    width:3px;height:3px;
+    border-radius:50%;
+    background:rgba(56,232,255,.85);
+    box-shadow:0 0 4px rgba(56,232,255,.8);
   }
-  .screw.tl{ left:10px; top:12px; }
-  .screw.tr{ right:10px; top:12px; }
-  .screw.bl{ left:10px; bottom:12px; }
-  .screw.br{ right:10px; bottom:12px; }
+  .screw.tl{ left:9px;  top:11px;  border-top-color:rgba(57,255,106,.7); border-left-color:rgba(57,255,106,.7); border-right:none; border-bottom:none; }
+  .screw.tr{ right:9px; top:11px;  border-top:1.5px solid rgba(57,255,106,.7); border-right:1.5px solid rgba(57,255,106,.7); border-left:none; border-bottom:none; }
+  .screw.tr::before{ left:auto; right:1px; }
+  .screw.bl{ left:9px;  bottom:11px; border-bottom:1.5px solid rgba(57,255,106,.7); border-left:1.5px solid rgba(57,255,106,.7); border-top:none; border-right:none; }
+  .screw.bl::before{ top:auto; bottom:1px; }
+  .screw.br{ right:9px; bottom:11px; border-bottom:1.5px solid rgba(57,255,106,.7); border-right:1.5px solid rgba(57,255,106,.7); border-top:none; border-left:none; }
+  .screw.br::before{ left:auto; right:1px; top:auto; bottom:1px; }
   .topbar::-webkit-scrollbar{width:7px;height:7px}
-  .topbar::-webkit-scrollbar-thumb{background:rgba(16,16,16,.22);border-radius:7px}
+  .topbar::-webkit-scrollbar-thumb{background:rgba(57,255,106,.3);border-radius:7px}
   .topbar::-webkit-scrollbar-track{background:transparent}
-  /* Fluid wordmark treatment: uppercase, .22em tracking, LIGHT emboss
-     (text-shadow 0 1px 0 rgba(255,255,255,.62)) so dark ink lifts off the metal. */
+  /* Wordmark: uppercase, .22em tracking, neon-green phosphor GLOW so it reads as a
+     lit terminal title on the dark HUD. */
   h1.wordmark{
     font-size:16px;
     font-weight:700;
     letter-spacing:.22em;
     text-transform:uppercase;
     line-height:1;
-    color:var(--ink);
-    text-shadow:0 1px 0 rgba(255,255,255,.62);
+    color:#dfffe9;
+    text-shadow:0 0 8px rgba(57,255,106,.7), 0 0 2px rgba(57,255,106,.9);
     white-space:nowrap;
     flex:0 0 auto;
   }
@@ -220,8 +218,8 @@
     width:.5em;height:.86em;
     margin-left:.18em;
     vertical-align:-.08em;
-    background:var(--ink);
-    box-shadow:none;
+    background:var(--neon);
+    box-shadow:0 0 8px rgba(57,255,106,.9);
     animation:blink 1.05s steps(1,end) infinite;
   }
   @keyframes blink{50%{opacity:0}}
@@ -229,8 +227,9 @@
     font-size:9px;
     letter-spacing:.34em;
     text-transform:uppercase;
-    color:var(--ink-dim);
-    opacity:1;
+    color:var(--cyan);
+    opacity:.8;
+    text-shadow:0 0 6px rgba(56,232,255,.35);
     white-space:nowrap;
     flex:0 0 auto;
   }
@@ -245,66 +244,75 @@
     gap:14px;
     justify-content:flex-start;
   }
-  /* ---- RECESSED BAYS — each control group reads as a shallow machined recess
-     milled into the faceplate: an inset top-left shadow + a hairline bottom-right
-     highlight (so light from above catches the lower lip), a faint inner darkening,
-     a hairline warm border, and comfortable internal padding. Subtle + consistent. */
+  /* ---- HUD BAYS — each control group reads as a recessed datapad bay: a faint
+     green-tinted glass fill, a green hairline border + inset glow, an angular clipped
+     top-right corner, and a small cyan corner tick echoing that clip. */
   .group{
     display:flex;
     flex-direction:column;
     align-items:stretch;
     gap:7px;
-    padding:11px 12px 12px;
-    border-radius:10px;
-    border:1px solid rgba(58,50,30,.14);
+    position:relative;
+    padding:10px 12px 12px;
     background:
-      linear-gradient(180deg, rgba(70,62,40,.05) 0%, rgba(255,255,255,0) 16%),
-      linear-gradient(180deg, rgba(0,0,0,.018) 0%, rgba(255,255,255,.05) 100%);
+      linear-gradient(180deg, rgba(57,255,106,.045), rgba(57,255,106,.012) 40%, rgba(0,0,0,.18));
+    border:1px solid rgba(57,255,106,.18);
+    border-radius:4px;
+    clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
     box-shadow:
-      inset 1px 2px 4px rgba(48,42,26,.16),       /* recess shadow, top-left */
-      inset -1px -1px 0 rgba(255,255,255,.6),      /* lit lower-right lip */
-      inset 0 1px 0 rgba(255,255,255,.18);
+      inset 0 0 16px rgba(0,0,0,.45),
+      inset 0 0 0 1px rgba(56,232,255,.05);
   }
-  /* ---- ENGRAVED LABELS — section labels look etched into the metal: dark ink
-     pressed in, with a pale BOTTOM highlight (text-shadow 0 1px 0 white) so the
-     lower edge of each stroke catches the overhead light like a milled groove. */
+  /* small cyan corner tick echoing the clipped HUD corner */
+  .group::after{
+    content:"";
+    position:absolute;
+    top:0;right:0;
+    width:11px;height:11px;
+    border-top:1px solid rgba(56,232,255,.5);
+    border-right:1px solid rgba(56,232,255,.5);
+    clip-path:polygon(0 0, 100% 0, 100% 100%);
+    pointer-events:none;
+  }
+  /* ---- TERMINAL LABELS — section labels read as datapad field titles: uppercase
+     neon-green with a soft glow and a leading cyan "›" HUD marker. */
   .group > .lab{
     font-size:9px;
-    letter-spacing:.18em;
+    letter-spacing:.2em;
     text-transform:uppercase;
     font-weight:700;
-    color:rgba(36,30,16,.74);
-    opacity:1;
+    color:var(--neon);
+    opacity:.92;
     user-select:none;
-    text-shadow:0 1px 0 rgba(255,255,255,.7);
+    text-shadow:0 0 6px rgba(57,255,106,.45);
+  }
+  .group > .lab::before{
+    content:"› ";
+    color:var(--cyan);
+    opacity:.85;
   }
 
-  /* ---- EMBOSSED METAL TILES — raised, tactile button tiles, IDENTICAL to
-     Fluid's .fieldBtn (~line 548) but for text labels on the LIGHT panel: a light
-     tile face, a 1px --line hairline border, the inset top-highlight + drop shadow
-     (inset 0 1px 0 rgba(255,255,255,.10), 0 2px 4px rgba(0,0,0,.42)); :hover lifts
-     (translateY(-1px) + 0 4px 8px), :active presses (translateY(1px)); the active
-     aria-pressed="true" maps to Fluid's .fieldBtn.on — the ACCENT-lit pressed
-     state (inset accent ring on an accent-tinted face). ---- */
+  /* ---- HUD TILE GRID — the row of datapad button tiles (3-up by default). The tile
+     skin (dark glassy face, glowing green hairline, LIT active state) is on .tab/.btn
+     below; this just lays them out. ---- */
   .tabs{
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
     gap:6px;
   }
   .tabs.cols2{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-  /* ---- BRUSHED SATIN GOLD tiles — a refined matte/satin gold faceplate. Each
-     tile is a raised metal chip: a vertical highlight→mid→shadow gold gradient
-     for the bevel, a fine brushed texture from a low-contrast repeating gradient
-     overlay, a top inset highlight + bottom inner shade, and a soft drop shadow
-     so it lifts off the creme faceplate. Text is dark engraved bronze with a pale
-     top text-shadow so it reads embossed. Restrained sheen, premium. */
+  /* ---- HUD TILES — dark glassy datapad tiles: a near-black green-tinted face, a
+     thin glowing green hairline border, an angular clipped top-right corner, neon-
+     green mono text. :hover brightens + lifts; :active presses. The active
+     aria-pressed="true" state is a fully LIT solid neon-green panel with dark glyph
+     text + outer bloom, unmistakable against the dim inactive tiles. ---- */
   .tab, .btn{
     appearance:none;
     -webkit-appearance:none;
     font-family:var(--mono);
     font-size:10px;
-    letter-spacing:0;
-    color:#3a2a12;
+    letter-spacing:.04em;
+    color:#9dffba;
     width:100%;
     min-height:34px;
     min-width:32px;
@@ -313,56 +321,52 @@
     overflow:hidden;
     text-overflow:clip;
     cursor:pointer;
-    text-shadow:0 1px 0 rgba(255,246,221,.55);
-    border-radius:8px;
-    border:1px solid rgba(120,86,28,.62);
-    background-color:#c9a24e;
-    background-image:
-      repeating-linear-gradient(90deg, rgba(255,250,232,.16) 0 1px, rgba(120,86,24,.10) 1px 2px),
-      linear-gradient(180deg, #e9d391 0%, #cda84f 46%, #b08a36 100%);
+    text-shadow:0 0 4px rgba(57,255,106,.35);
+    border-radius:3px;
+    border:1px solid rgba(57,255,106,.32);
+    background-color:#05090b;
+    background-image:linear-gradient(180deg, rgba(57,255,106,.07) 0%, rgba(57,255,106,.02) 55%, rgba(0,0,0,.25) 100%);
+    clip-path:polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,250,231,.72),
-      inset 0 -1px 0 rgba(96,66,16,.45),
-      0 2px 5px rgba(70,48,8,.30);
+      inset 0 0 8px rgba(0,0,0,.5),
+      inset 0 0 0 1px rgba(57,255,106,.05),
+      0 0 0 rgba(57,255,106,0);
     transition:transform .07s ease, box-shadow .1s ease, background-image .1s ease, color .1s ease, border-color .1s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
-    border-color:rgba(140,100,32,.7);
-    background-image:
-      repeating-linear-gradient(90deg, rgba(255,252,238,.2) 0 1px, rgba(120,86,24,.09) 1px 2px),
-      linear-gradient(180deg, #f3e0a4 0%, #d8b65e 46%, #bd9740 100%);
+    color:#d6ffe2;
+    border-color:rgba(57,255,106,.6);
+    background-image:linear-gradient(180deg, rgba(57,255,106,.14) 0%, rgba(57,255,106,.05) 55%, rgba(0,0,0,.2) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,252,238,.82),
-      inset 0 -1px 0 rgba(96,66,16,.4),
-      0 5px 11px rgba(70,48,8,.34);
+      inset 0 0 10px rgba(57,255,106,.12),
+      0 0 10px rgba(57,255,106,.28);
   }
   .tab:active, .btn:active{
     transform:translateY(1px);
     box-shadow:
-      inset 0 2px 4px rgba(82,54,10,.5),
-      inset 0 1px 0 rgba(255,250,231,.3),
-      0 1px 1px rgba(70,48,8,.28);
+      inset 0 0 12px rgba(0,0,0,.6),
+      0 0 6px rgba(57,255,106,.2);
   }
-  /* selected — a brighter, polished/lit gold with a warm inset ring + glow so the
-     active tile clearly pops against the matte inactive chips */
+  /* selected — the clicked tile is a fully LIT neon-green panel with dark text +
+     a strong bloom so it unmistakably pops against the dark inactive tiles */
   .tab[aria-pressed="true"]{
-    color:#3a2706;
-    border-color:rgba(168,120,30,.85);
-    background-image:
-      repeating-linear-gradient(90deg, rgba(255,253,240,.26) 0 1px, rgba(150,108,28,.10) 1px 2px),
-      linear-gradient(180deg, #fff0bf 0%, #ecc868 44%, #cda03e 100%);
+    color:#03140a;
+    font-weight:700;
+    text-shadow:0 1px 0 rgba(255,255,255,.25);
+    border-color:#8dffb0;
+    background-image:linear-gradient(180deg, #5cff86 0%, #2bf45f 60%, #16d84a 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,245,.95),
-      inset 0 0 0 1px rgba(255,232,160,.55),
-      inset 0 -1px 0 rgba(120,80,16,.4),
-      0 0 9px rgba(214,168,66,.55),
-      0 3px 7px rgba(70,48,8,.3);
+      inset 0 1px 0 rgba(255,255,255,.55),
+      inset 0 0 0 1px rgba(255,255,255,.2),
+      0 0 16px rgba(57,255,106,.65),
+      0 0 4px rgba(57,255,106,.9);
   }
   .tab[aria-pressed="true"]:hover{
-    background-image:
-      repeating-linear-gradient(90deg, rgba(255,254,244,.3) 0 1px, rgba(150,108,28,.09) 1px 2px),
-      linear-gradient(180deg, #fff4cd 0%, #f2d178 44%, #d6a948 100%);
+    background-image:linear-gradient(180deg, #6effa0 0%, #36ff6e 60%, #1ee457 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.6),
+      0 0 20px rgba(57,255,106,.8);
   }
 
   /* MODE SWITCH — the PRIMARY selector. Set apart from the row of sub-tabs below as
@@ -457,21 +461,21 @@
     background:linear-gradient(180deg, rgba(232,232,226,0) 0%, rgba(232,232,226,.66) 54%, rgba(232,232,226,.9) 100%);
     text-shadow:0 1px 0 rgba(255,255,255,.6);
   }
-  /* selected — a bright ring that pops on both the dark swatch and the light panel */
+  /* selected — a bright neon-green ring that pops on both the dark swatch and panel */
   .looktile[aria-pressed="true"]{
-    outline:2px solid var(--accent);
+    outline:2px solid var(--neon);
     outline-offset:1px;
-    border-color:rgba(0,0,0,.3);
+    border-color:rgba(57,255,106,.5);
     box-shadow:
-      inset 0 0 0 2px rgba(255,255,255,.92),
-      0 0 12px rgba(245,189,201,.5),
-      0 2px 6px rgba(0,0,0,.42);
+      inset 0 0 0 2px rgba(57,255,106,.85),
+      0 0 14px rgba(57,255,106,.55),
+      0 2px 6px rgba(0,0,0,.5);
     transform:translateY(-1px);
   }
 
   /* uniform, always-visible focus ring */
   .tab:focus-visible, .btn:focus-visible, .looktile:focus-visible, .knob:focus-visible, input:focus-visible{
-    outline:2px solid var(--ink);
+    outline:2px solid var(--cyan);
     outline-offset:2px;
   }
 
@@ -501,11 +505,10 @@
     margin:0;padding:0;
     overflow:hidden;
   }
-  /* ---- BRASS KNOBS — realistic machined brass dials to match the gold tiles. The
-     outer .knob is the KNURLED RIM: a brushed-brass radial dome with a fine notched
-     edge (a conic-gradient knurl ring) + a soft contact/AO shadow under it so it
-     sits ON the plate. ::before is the inset brass CAP (top-left specular highlight),
-     and .knob-dial::after (untouched logic) carries the dark INDICATOR line. */
+  /* ---- TECH DIALS — dark HUD gauges to match the datapad tiles. The outer .knob is
+     a charcoal face inside a glowing green ring with a dotted green tick bezel (conic
+     gradient) + a green-glow AO under it. ::before is the recessed dark-glass cap, and
+     .knob-dial::after (untouched logic) carries the glowing GREEN indicator. */
   .knob{
     width:46px;height:46px;
     position:relative;
@@ -513,33 +516,30 @@
     cursor:pointer;
     touch-action:none;
     -webkit-user-select:none;user-select:none;
-    /* knurled brass rim: a notched conic ring over a brushed-brass dome */
+    /* dark tech dial: charcoal face inside a glowing green ring, with a dotted
+       green tick ring (conic gradient) reading as a HUD gauge bezel. */
     background:
-      repeating-conic-gradient(from 0deg,
-        rgba(255,244,206,.55) 0deg 2deg, rgba(120,90,34,.5) 2deg 4deg),
-      radial-gradient(circle at 50% 36%, #f3e2ac 0%, #d8b563 30%, #b48f3c 60%, #8a6a28 100%);
+      radial-gradient(circle at 50% 50%, #0a1410 0%, #06100c 58%, #030806 100%),
+      conic-gradient(from 0deg,
+        rgba(57,255,106,.55) 0deg, rgba(57,255,106,0) 6deg, rgba(57,255,106,0) 24deg,
+        rgba(57,255,106,.55) 24deg, rgba(57,255,106,0) 30deg, rgba(57,255,106,0) 48deg) ;
     box-shadow:
-      inset 0 1px 1px rgba(255,250,224,.7),
-      inset 0 -3px 6px rgba(70,48,12,.5),
-      0 4px 8px rgba(54,38,10,.42),               /* soft contact/AO shadow */
-      0 1px 0 rgba(255,250,224,.4);
+      inset 0 0 0 1px rgba(57,255,106,.45),
+      inset 0 0 10px rgba(0,0,0,.7),
+      0 0 10px rgba(57,255,106,.22),
+      0 2px 6px rgba(0,0,0,.55);
   }
   .knob::before{
-    /* inset brushed-brass CAP inside the knurled rim, lit from top-left */
+    /* recessed dark glass face inside the glowing rim */
     content:"";
     position:absolute;inset:7px;
     border-radius:50%;
-    background:
-      radial-gradient(circle at 38% 30%, rgba(255,250,228,.9), rgba(255,250,228,0) 40%),
-      repeating-linear-gradient(90deg, rgba(255,248,220,.10) 0 1px, rgba(120,92,36,.08) 1px 2px),
-      radial-gradient(circle at 50% 52%, #e7cd84 0%, #c8a052 46%, #9c7833 82%, #7a5c26 100%);
+    background:radial-gradient(circle at 46% 34%, #0c1a14, #061009 70%, #030705 100%);
     box-shadow:
-      inset 0 1px 1px rgba(255,250,228,.7),
-      inset 0 -2px 4px rgba(70,48,12,.45),
-      inset 0 0 0 1px rgba(80,58,22,.4),
-      0 1px 1px rgba(0,0,0,.25);
+      inset 0 0 6px rgba(0,0,0,.8),
+      inset 0 0 0 1px rgba(57,255,106,.16);
   }
-  /* rotating indicator: a layer that turns; the white dot sits near its top */
+  /* rotating indicator: a layer that turns; the green dot sits near its top */
   .knob-dial{
     position:absolute;inset:0;
     border-radius:50%;
@@ -548,18 +548,15 @@
     transition:transform .06s linear;
   }
   .knob-dial::after{
-    /* INDICATOR — a dark engraved line milled into the brass cap from the rim
-       inward, with a pale lower edge so it reads as a recessed groove. */
+    /* INDICATOR — a glowing neon-green tick reading as the gauge needle. */
     content:"";
     position:absolute;
-    left:50%;top:8px;
-    width:2.5px;height:9px;
-    margin-left:-1.25px;
-    border-radius:1.5px;
-    background:linear-gradient(180deg, #3a2a0c 0%, #25190a 100%);
-    box-shadow:
-      0 1px 0 rgba(255,248,220,.5),
-      inset 0 0 0 .5px rgba(20,12,2,.6);
+    left:50%;top:5px;
+    width:4px;height:8px;
+    margin-left:-2px;
+    border-radius:2px;
+    background:#5cff86;
+    box-shadow:0 0 7px rgba(57,255,106,.95), 0 0 3px rgba(57,255,106,1);
   }
   .knoblabel{
     text-align:center;
@@ -568,18 +565,18 @@
   .knoblabel .knm{
     display:block;
     font-size:8px;
-    letter-spacing:.16em;
+    letter-spacing:.18em;
     text-transform:uppercase;
-    color:rgba(36,30,16,.66);
-    text-shadow:0 1px 0 rgba(255,255,255,.65);
+    color:var(--cyan);
+    opacity:.7;
   }
   .knoblabel .val{
     display:block;
     font-size:11px;
     font-weight:700;
     font-variant-numeric:tabular-nums;
-    color:rgba(30,24,12,.95);
-    text-shadow:0 1px 0 rgba(255,255,255,.6);
+    color:#bdffd0;
+    text-shadow:0 0 5px rgba(57,255,106,.4);
     margin-top:1px;
   }
 
@@ -780,31 +777,31 @@
   body.mode-image #grp-actions .tabs,
   body.mode-words #grp-actions .tabs{ grid-template-columns:repeat(2,minmax(0,1fr)); }
 
-  /* ---- WORDS text input — a self-contained field styled to the metal panel:
-     a recessed dark slot (matching the metal tiles' face) with light ink, a
-     hairline border + inset shadow so it reads as a milled groove in the panel. */
+  /* ---- WORDS text input — a self-contained terminal field styled to the HUD panel:
+     a recessed dark slot with neon-green ink + glow, a green hairline border + inset
+     shadow so it reads as a lit input line on the datapad. */
   .wordfield{
     appearance:none;
     -webkit-appearance:none;
     font-family:var(--mono);
     font-size:13px;
     letter-spacing:.04em;
-    color:#f2f2f3;
+    color:#caffd8;
     width:100%;
     min-height:38px;
     padding:8px 10px;
-    border-radius:8px;
-    border:1px solid rgba(0,0,0,.6);
-    background-color:#0a0b10;
-    background-image:linear-gradient(180deg, #0c0d13 0%, #121319 100%);
+    border-radius:3px;
+    border:1px solid rgba(57,255,106,.3);
+    background-color:#04090b;
+    background-image:linear-gradient(180deg, #050b0d 0%, #03080a 100%);
     box-shadow:
-      inset 0 2px 4px rgba(0,0,0,.6),
-      inset 0 1px 0 rgba(255,255,255,.04);
-    text-shadow:none;
-    caret-color:#fff;
+      inset 0 0 8px rgba(0,0,0,.7),
+      inset 0 0 0 1px rgba(57,255,106,.06);
+    text-shadow:0 0 5px rgba(57,255,106,.3);
+    caret-color:var(--neon);
   }
-  .wordfield::placeholder{ color:rgba(242,242,243,.4); }
-  .wordfield:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  .wordfield::placeholder{ color:rgba(110,255,160,.4); }
+  .wordfield:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; box-shadow:inset 0 0 8px rgba(0,0,0,.7), 0 0 10px rgba(57,255,106,.3); }
 
   /* ---- IMAGE SECTION — two states toggled by body.has-image ---------------
      Default (no image): show .image-empty (the "insert image" button), hide
@@ -837,14 +834,14 @@
     flex:0 0 auto;
     width:62px;height:62px;
     padding:3px;
-    border-radius:8px;
+    border-radius:3px;
     cursor:pointer;
-    border:1px solid rgba(0,0,0,.55);
-    background-color:#06060a;
-    background-image:linear-gradient(180deg, #1a1b22 0%, #101117 55%, #08090d 100%);
+    border:1px solid rgba(57,255,106,.32);
+    background-color:#05090b;
+    background-image:linear-gradient(180deg, rgba(57,255,106,.06) 0%, rgba(0,0,0,.25) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.12),
-      0 2px 4px rgba(0,0,0,.42);
+      inset 0 0 8px rgba(0,0,0,.5),
+      0 0 6px rgba(57,255,106,.15);
     transition:transform .07s ease, box-shadow .1s ease, border-color .1s ease;
   }
   .img-thumb img{
@@ -856,18 +853,19 @@
   }
   .img-thumb:hover{
     transform:translateY(-1px);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.16), 0 4px 8px rgba(0,0,0,.5);
+    border-color:rgba(57,255,106,.6);
+    box-shadow:inset 0 0 8px rgba(0,0,0,.5), 0 0 12px rgba(57,255,106,.3);
   }
   .img-thumb:active{ transform:translateY(1px); }
-  /* active = image is the current render: bright accent ring */
+  /* active = image is the current render: bright neon-green ring */
   .img-thumb[aria-pressed="true"]{
-    border-color:#fff;
+    border-color:var(--neon);
     box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,.9),
-      0 0 0 2px rgba(255,255,255,.55),
-      0 2px 6px rgba(0,0,0,.4);
+      inset 0 0 0 1px rgba(57,255,106,.8),
+      0 0 0 2px rgba(57,255,106,.45),
+      0 0 14px rgba(57,255,106,.5);
   }
-  .img-thumb:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+  .img-thumb:focus-visible{ outline:2px solid var(--cyan); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce){
     .img-thumb{ transition:box-shadow .12s ease, border-color .12s ease; }
     .img-thumb:hover, .img-thumb:active{ transform:none; }
