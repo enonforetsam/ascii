@@ -2572,6 +2572,9 @@
   // whose glyph size is still within this fraction of the size-maximizing best, so
   // text fills the width (esp. on a wide desktop) instead of stacking eagerly.
   var WRAP_KEEP = 0.7;
+  // a single word stays on ONE long line as long as its glyphs are at least this
+  // tall (grid-cell units); only a long word on a small canvas wraps to stay legible.
+  var MIN_GLYPH_SIZE = 30;
   function chooseWrap(words, charAspect, availW, availH, cap) {
     if (availW <= 0 || availH <= 0) return { lines: [words.join(' ')], size: 0, L: 1 };
     var hardCap = Math.min(cap, Math.max(1, words.length === 1 ? words[0].length : 64));
@@ -2598,8 +2601,10 @@
     for (var i = 0; i < cands.length; i++) {
       if (cands[i].size >= best.size * WRAP_KEEP) { pick = cands[i]; break; }
     }
-    // single token stays on one line unless wrapping is a big legibility win
-    if (single && pick.size < one.size * SINGLE_WRAP_GAIN) return one;
+    // single word: keep it on ONE long line while the glyphs stay legible; only
+    // stack it when a single line would be too small to read (a long word on a
+    // small canvas). Most words (brand names / short text) stay one long line.
+    if (single) return (one.size >= MIN_GLYPH_SIZE) ? one : best;
     return pick;
   }
 
