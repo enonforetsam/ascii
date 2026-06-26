@@ -72,6 +72,7 @@
     height:100%;
     display:block;
     z-index:0;
+    touch-action:none;   /* image pan/zoom + engine pointer own the canvas gestures (no native scroll/pinch) */
   }
 
   .vignette{
@@ -1063,6 +1064,7 @@
         </div>
         <div class="tabs">
           <button class="tab" id="img-invert" type="button" aria-pressed="false" aria-label="Invert image luminance mapping">invert</button>
+          <button class="tab" id="img-fit" type="button" aria-label="Recenter and refit the image (reset zoom and pan)">fit</button>
         </div>
       </div>
 
@@ -2238,9 +2240,77 @@
     var off = document.createElement('canvas');
     var octx = off.getContext('2d', { willReadFrequently: true });
 
+    // FRAMING — zoom (1 = today's contain-fit; up to ZMAX) + pan (normalized
+    // -1..1 of the slack between the placed image and the stage). Aspect is
+    // ALWAYS preserved: we scale the CONTAIN-fit rect uniformly by zoom, then
+    // offset by pan, then sample each grid cell from that placed rect.
+    var ZMIN = 1, ZMAX = 6;
+    var zoom = 1, panX = 0, panY = 0;
+    // last sample()'s pan travel (cells) — lets a pixel drag convert to a pan
+    // delta that matches the placed rect exactly. Recomputed every sample().
+    var lastTravelX = 1, lastTravelY = 1;
+
+    function clampZoom(z) { return z < ZMIN ? ZMIN : (z > ZMAX ? ZMAX : z); }
+    function clampPan(p)  { return p < -1 ? -1 : (p > 1 ? 1 : p); }
+
     function hasImage() { return !!srcImg; }
     function setImage(img) { srcImg = img; cacheDirty = true; }
     function invalidate() { cacheDirty = true; }
+
+    function getView() { return { zoom: zoom, panX: panX, panY: panY }; }
+    function setView(z, px, py) {
+      zoom = clampZoom(+z || 1);
+      panX = clampPan(px == null ? panX : +px);
+      panY = clampPan(py == null ? panY : +py);
+      cacheDirty = true;
+    }
+    // nudge pan by normalized deltas (used by drag); zoomBy multiplies zoom
+    // optionally toward a focal point (fx,fy in 0..1 of the stage) so the
+    // point under the cursor stays put.
+    function nudgePan(dx, dy) { panX = clampPan(panX + dx); panY = clampPan(panY + dy); cacheDirty = true; }
+    function reset() { zoom = 1; panX = 0; panY = 0; cacheDirty = true; }
+
+    // pan by a delta measured in CELLS (a pixel drag / cw, ch). Uses the travel
+    // captured by the most recent sample() so the image tracks the cursor 1:1.
+    function panByCells(dxCells, dyCells) {
+      panX = clampPan(panX + dxCells / lastTravelX);
+      panY = clampPan(panY + dyCells / lastTravelY);
+      cacheDirty = true;
+    }
+
+    // contain-fit rect size in cells at a given zoom (aspect-preserved).
+    function fitRect(z) {
+      if (!srcImg) return null;
+      var iw = srcImg.naturalWidth || srcImg.width, ih = srcImg.naturalHeight || srcImg.height;
+      if (!iw || !ih) return null;
+      var gridAspect = (cols * CHAR_ASPECT) / rows, imgAspect = iw / ih, w, h;
+      if (imgAspect > gridAspect) { w = cols; h = (cols * CHAR_ASPECT) / imgAspect; }
+      else { h = rows; w = (rows * imgAspect) / CHAR_ASPECT; }
+      return { w: w * z, h: h * z };
+    }
+    // zoom by a multiplicative factor, keeping the stage point (fx,fy) in CELLS
+    // fixed under the cursor (focal zoom). Re-solves pan from the new geometry.
+    function zoomByAt(factor, fxCells, fyCells) {
+      var r0 = fitRect(zoom); if (!r0) { return; }
+      // current placement offsets (cells)
+      var ox0 = (cols - r0.w) / 2 + panX * lastTravelX;
+      var oy0 = (rows - r0.h) / 2 + panY * lastTravelY;
+      // image fraction under the focal point (clamped to the rect)
+      var ux = r0.w > 1e-3 ? (fxCells - ox0) / r0.w : 0.5;
+      var uy = r0.h > 1e-3 ? (fyCells - oy0) / r0.h : 0.5;
+      var nz = clampZoom(zoom * factor);
+      var r1 = fitRect(nz); if (!r1) { return; }
+      // desired new offset so the same fraction sits under (fx,fy)
+      var ox1 = fxCells - ux * r1.w;
+      var oy1 = fyCells - uy * r1.h;
+      var slackX = (cols - r1.w) / 2, slackY = (rows - r1.h) / 2;
+      var tX = Math.max(Math.abs(slackX), r1.w / 2); tX = tX > 1e-3 ? tX : 1;
+      var tY = Math.max(Math.abs(slackY), r1.h / 2); tY = tY > 1e-3 ? tY : 1;
+      zoom = nz;
+      panX = clampPan((ox1 - slackX) / tX);
+      panY = clampPan((oy1 - slackY) / tY);
+      cacheDirty = true;
+    }
 
     // Sample the source image into cache[] at the current grid size, applying
     // aspect correction, contrast and invert. Returns false if no image yet.
@@ -2262,7 +2332,7 @@
       // CONTAIN: fit the whole image inside the grid (letterbox), preserving
       // the image's aspect. Compute the sub-rectangle of the grid the image
       // occupies (in cell units, with X measured in CHAR_ASPECT-wide units).
-      var drawWcells, drawHcells; // size in CELLS the image fills
+      var drawWcells, drawHcells; // size in CELLS the image fills at zoom=1 (contain)
       if (imgAspect > gridAspect) {
         // image wider than grid -> full width, letterbox top/bottom
         drawWcells = cols;
@@ -2272,8 +2342,26 @@
         drawHcells = rows;
         drawWcells = (rows * imgAspect) / CHAR_ASPECT;   // cols it spans
       }
-      var ox = Math.round((cols - drawWcells) / 2);
-      var oy = Math.round((rows - drawHcells) / 2);
+      // ZOOM: scale the contain-fit rect UNIFORMLY (aspect preserved — a circle
+      // stays round). PAN: slide within the slack between the placed rect and the
+      // stage; pan in -1..1 maps centered..hard-against-an-edge. When the rect is
+      // SMALLER than the stage on an axis (pillarbox) slack is negative, so pan
+      // moves the strip across the empty margin; clamp keeps it from leaving fully.
+      drawWcells *= zoom;
+      drawHcells *= zoom;
+      var slackX = (cols - drawWcells) / 2;   // centered offset on X
+      var slackY = (rows - drawHcells) / 2;   // centered offset on Y
+      // pan shifts by |slack| + a margin so even a pillarboxed strip can travel
+      // edge-to-edge; magnitude = max(|slack|, half the rect) keeps it draggable.
+      var travelX = Math.max(Math.abs(slackX), drawWcells / 2);
+      var travelY = Math.max(Math.abs(slackY), drawHcells / 2);
+      lastTravelX = travelX > 1e-3 ? travelX : 1;
+      lastTravelY = travelY > 1e-3 ? travelY : 1;
+      // float placement (sub-cell), rounded only at the integer offscreen step.
+      var oxF = slackX + panX * travelX;
+      var oyF = slackY + panY * travelY;
+      var ox = Math.round(oxF);
+      var oy = Math.round(oyF);
       var dw = Math.max(1, Math.round(drawWcells));
       var dh = Math.max(1, Math.round(drawHcells));
 
@@ -2292,7 +2380,8 @@
 
       // PASS 1 — fill the populated cells with RAW Rec.709 luminance and record
       // each populated cell index + value (so we can normalize across exactly the
-      // image region, not the letterbox margins).
+      // image region, not the letterbox margins). Cells outside the placed rect
+      // stay background 0 (the gy/gx bounds checks below clip to the stage).
       var cellIdx = new Int32Array(dw * dh);
       var cellLum = new Float32Array(dw * dh);
       var nPop = 0;
@@ -2370,7 +2459,10 @@
 
     return {
       render: render, sample: sample, invalidate: invalidate,
-      setImage: setImage, hasImage: hasImage
+      setImage: setImage, hasImage: hasImage,
+      getView: getView, setView: setView, nudgePan: nudgePan, reset: reset,
+      panByCells: panByCells, zoomByAt: zoomByAt,
+      ZMIN: ZMIN, ZMAX: ZMAX
     };
   })();
 
@@ -3768,6 +3860,7 @@
   var btnReplace = document.getElementById('img-replace');
   var btnRemove  = document.getElementById('img-remove');
   var btnInvert  = document.getElementById('img-invert');
+  var btnFit     = document.getElementById('img-fit');
   var btnThumb   = document.getElementById('img-thumb');
   var thumbImg   = document.getElementById('img-thumb-img');
   var toastEl    = document.getElementById('toast');
@@ -4324,12 +4417,15 @@
 
   function openPicker() { if (imgFile) imgFile.click(); }
 
+  var framingHintShown = false;   // one-time "drag/scroll" hint guard
+
   // Load a dataURL into an Image, store it, switch to the image engine,
   // recompute + render, toast. Shared by file picker, drag-drop, paste.
   function loadImageFromURL(url, label) {
     var img = new Image();
     img.onload = function () {
       Image_.setImage(img);
+      Image_.reset();           // NEW image -> default framing (zoom 1 / pan 0)
       // point the section's thumbnail at the loaded image + flip to the loaded
       // state. setEngine('image') below auto-activates the image render.
       if (thumbImg) thumbImg.src = url;
@@ -4350,6 +4446,11 @@
       resize();  // cell changed -> re-fit the grid (also re-samples the image)
       start();   // (re)render with the new sample (reduced-motion has no loop)
       toast(label || ('image · ' + img.naturalWidth + 'x' + img.naturalHeight));
+      // one-time framing hint (the first time an image is ever loaded this session)
+      if (!framingHintShown) {
+        framingHintShown = true;
+        setTimeout(function () { toast('drag to move · scroll to zoom'); }, 1700);
+      }
     };
     img.onerror = function () { toast('image failed to load'); };
     img.src = url;
@@ -4401,6 +4502,14 @@
     if (state.engine === 'image') start();
   }
   if (btnInvert) btnInvert.addEventListener('click', function () { setInvert(!state.invert); });
+
+  // FIT — recenter + refit (reset zoom to 1, pan to 0).
+  if (btnFit) btnFit.addEventListener('click', function () {
+    Image_.reset();
+    Image_.invalidate();
+    if (state.engine === 'image') start();
+    toast('image refit');
+  });
 
   // DRAG-AND-DROP anywhere on the page loads an image + switches to image.
   window.addEventListener('dragover', function (e) {
@@ -4469,6 +4578,84 @@
   window.addEventListener('pointermove', onPointer, { passive: true });
   window.addEventListener('pointerdown', onPointer, { passive: true });
   window.addEventListener('pointerleave', function () { pointer.active = false; });
+
+  /* ---------- IMAGE FRAMING: pan (drag) + zoom (wheel / pinch) -------------
+     ONLY active when state.mode === 'image'. Gated so generative/words pointer
+     reactivity (onPointer aiming the donut etc.) is never touched. Pan/zoom call
+     Image_ then re-render via start(). Coordinates are stage-relative (rectL/rectT
+     subtract the rail offset), converted px->cells via cw/ch to feed Image_. */
+  var imgMode = function () { return state.mode === 'image' && Image_.hasImage(); };
+  // active pointers for drag + pinch (id -> {x,y} in stage px)
+  var framePtrs = {};
+  var pinchPrevDist = 0;
+
+  function stagePx(ev) {
+    return { x: ev.clientX - rectL, y: ev.clientY - rectT };
+  }
+  function overStage(p) { return p.x >= 0 && p.y >= 0 && p.x < vw && p.y < vh; }
+
+  canvas.addEventListener('pointerdown', function (ev) {
+    if (!imgMode()) return;
+    var p = stagePx(ev);
+    if (!overStage(p)) return;
+    framePtrs[ev.pointerId] = p;
+    var ids = Object.keys(framePtrs);
+    if (ids.length === 2) {
+      var a = framePtrs[ids[0]], b = framePtrs[ids[1]];
+      pinchPrevDist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+    }
+    try { canvas.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+
+  canvas.addEventListener('pointermove', function (ev) {
+    if (!imgMode()) return;
+    if (!(ev.pointerId in framePtrs)) return;
+    var prev = framePtrs[ev.pointerId];
+    var p = stagePx(ev);
+    framePtrs[ev.pointerId] = p;
+    var ids = Object.keys(framePtrs);
+    if (ids.length >= 2) {
+      // PINCH zoom toward the midpoint of the two fingers
+      var a = framePtrs[ids[0]], b = framePtrs[ids[1]];
+      var dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      if (pinchPrevDist > 0) {
+        var f = dist / pinchPrevDist;
+        var midx = ((a.x + b.x) / 2) / cw, midy = ((a.y + b.y) / 2) / ch;
+        Image_.zoomByAt(f, midx, midy);
+        Image_.invalidate(); start();
+      }
+      pinchPrevDist = dist;
+    } else {
+      // single-pointer DRAG -> pan (px delta -> cell delta)
+      var dxCells = (p.x - prev.x) / cw;
+      var dyCells = (p.y - prev.y) / ch;
+      if (dxCells || dyCells) {
+        Image_.panByCells(dxCells, dyCells);
+        Image_.invalidate(); start();
+      }
+    }
+  }, { passive: true });
+
+  function endFramePtr(ev) {
+    if (ev.pointerId in framePtrs) {
+      delete framePtrs[ev.pointerId];
+      pinchPrevDist = 0;
+      try { canvas.releasePointerCapture(ev.pointerId); } catch (e) {}
+    }
+  }
+  canvas.addEventListener('pointerup', endFramePtr);
+  canvas.addEventListener('pointercancel', endFramePtr);
+
+  canvas.addEventListener('wheel', function (ev) {
+    if (!imgMode()) return;
+    var p = stagePx(ev);
+    if (!overStage(p)) return;
+    ev.preventDefault();                 // don't scroll the page while framing
+    // smooth multiplicative zoom toward the cursor; deltaY<0 (scroll up) = zoom in
+    var f = Math.exp(-ev.deltaY * 0.0015);
+    Image_.zoomByAt(f, p.x / cw, p.y / ch);
+    Image_.invalidate(); start();
+  }, { passive: false });
 
   window.addEventListener('hashchange', function () {
     readHash();
