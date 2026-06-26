@@ -213,13 +213,19 @@
     gap:6px;
   }
   .tabs.cols2{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+  /* ---- BRUSHED SATIN GOLD tiles — a refined matte/satin gold faceplate. Each
+     tile is a raised metal chip: a vertical highlight→mid→shadow gold gradient
+     for the bevel, a fine brushed texture from a low-contrast repeating gradient
+     overlay, a top inset highlight + bottom inner shade, and a soft drop shadow
+     so it lifts off the creme faceplate. Text is dark engraved bronze with a pale
+     top text-shadow so it reads embossed. Restrained sheen, premium. */
   .tab, .btn{
     appearance:none;
     -webkit-appearance:none;
     font-family:var(--mono);
     font-size:10px;
     letter-spacing:0;
-    color:#ececef;
+    color:#3a2a12;
     width:100%;
     min-height:34px;
     min-width:32px;
@@ -228,41 +234,56 @@
     overflow:hidden;
     text-overflow:clip;
     cursor:pointer;
-    text-shadow:none;
+    text-shadow:0 1px 0 rgba(255,246,221,.55);
     border-radius:8px;
-    border:1px solid rgba(0,0,0,.55);
-    background-color:#06060a;
-    background-image:linear-gradient(180deg, #1a1b22 0%, #101117 55%, #08090d 100%);
+    border:1px solid rgba(120,86,28,.62);
+    background-color:#c9a24e;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,250,232,.16) 0 1px, rgba(120,86,24,.10) 1px 2px),
+      linear-gradient(180deg, #e9d391 0%, #cda84f 46%, #b08a36 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.12),
-      0 2px 4px rgba(0,0,0,.42);
+      inset 0 1px 0 rgba(255,250,231,.72),
+      inset 0 -1px 0 rgba(96,66,16,.45),
+      0 2px 5px rgba(70,48,8,.30);
     transition:transform .07s ease, box-shadow .1s ease, background-image .1s ease, color .1s ease, border-color .1s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
-    background-image:linear-gradient(180deg, #20212a 0%, #15161d 55%, #0c0d12 100%);
+    border-color:rgba(140,100,32,.7);
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,252,238,.2) 0 1px, rgba(120,86,24,.09) 1px 2px),
+      linear-gradient(180deg, #f3e0a4 0%, #d8b65e 46%, #bd9740 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.16),
-      0 4px 8px rgba(0,0,0,.5);
+      inset 0 1px 0 rgba(255,252,238,.82),
+      inset 0 -1px 0 rgba(96,66,16,.4),
+      0 5px 11px rgba(70,48,8,.34);
   }
   .tab:active, .btn:active{
     transform:translateY(1px);
     box-shadow:
-      inset 0 1px 3px rgba(0,0,0,.6),
-      0 1px 1px rgba(0,0,0,.4);
+      inset 0 2px 4px rgba(82,54,10,.5),
+      inset 0 1px 0 rgba(255,250,231,.3),
+      0 1px 1px rgba(70,48,8,.28);
   }
-  /* selected — the clicked tile fills WHITE with dark text (pops against the
-     dark gunmetal tiles) */
+  /* selected — a brighter, polished/lit gold with a warm inset ring + glow so the
+     active tile clearly pops against the matte inactive chips */
   .tab[aria-pressed="true"]{
-    color:#0b0b0c;
-    background-image:linear-gradient(180deg, #ffffff 0%, #f2f2f3 60%, #e4e4e6 100%);
-    border-color:rgba(0,0,0,.28);
+    color:#3a2706;
+    border-color:rgba(168,120,30,.85);
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,253,240,.26) 0 1px, rgba(150,108,28,.10) 1px 2px),
+      linear-gradient(180deg, #fff0bf 0%, #ecc868 44%, #cda03e 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.95),
-      0 2px 6px rgba(0,0,0,.3);
+      inset 0 1px 0 rgba(255,255,245,.95),
+      inset 0 0 0 1px rgba(255,232,160,.55),
+      inset 0 -1px 0 rgba(120,80,16,.4),
+      0 0 9px rgba(214,168,66,.55),
+      0 3px 7px rgba(70,48,8,.3);
   }
   .tab[aria-pressed="true"]:hover{
-    background-image:linear-gradient(180deg, #ffffff 0%, #f6f6f7 60%, #eaeaec 100%);
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,254,244,.3) 0 1px, rgba(150,108,28,.09) 1px 2px),
+      linear-gradient(180deg, #fff4cd 0%, #f2d178 44%, #d6a948 100%);
   }
 
   /* MODE SWITCH — the PRIMARY selector. Set apart from the row of sub-tabs below as
