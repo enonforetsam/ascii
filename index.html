@@ -121,22 +121,83 @@
     --panel-metal:#d8d8d5;
     color:var(--ink);
     text-shadow:none;
-    /* Fluid's exact faceplate: layered radial sheens + a brushed vertical texture +
-       a vertical metal gradient, with the inset bevel highlight/shadow. Keep a
-       hairline border-right so it reads as a faceplate beside the dark art stage
-       (Fluid uses inset -1px; here a real border divides panel from stage). */
+    /* MACHINED-METAL FACEPLATE — a real premium-instrument plate. Background stack,
+       top to bottom:
+        (1) large soft DIAGONAL SHEEN — a hint of an environment/light sweep across
+            the brushed surface (off-axis, warm at the lower pass),
+        (2) top-right environment catch + bottom-left warm shade,
+        (3) FINE ANISOTROPIC BRUSHED GRAIN — a tight low-contrast vertical repeating
+            gradient (the milling direction) so the plate reads as brushed metal,
+        (4) a faintly warm vertical METAL gradient lit from above.
+       box-shadow: a TOP-EDGE catch-light + bright left bevel + a BOTTOM inner shade,
+       and a soft drop over the dark stage; a hairline warm border divides them. */
     background-color:var(--panel-metal);
     background-image:
-      radial-gradient(120% 80% at 100% 0%, rgba(255,255,255,.56), rgba(255,255,255,0) 42%),
-      radial-gradient(100% 80% at 0% 100%, rgba(84,68,102,.08), rgba(84,68,102,0) 48%),
-      linear-gradient(90deg, rgba(255,255,255,.38), rgba(255,255,255,0) 28%, rgba(0,0,0,.10) 100%),
-      repeating-linear-gradient(90deg, rgba(255,255,255,.28) 0, rgba(255,255,255,.28) 1px, rgba(70,76,86,.07) 2px, rgba(70,76,86,.07) 4px),
-      linear-gradient(180deg, #e7e8e8 0%, #c8ccd1 54%, #aeb4bc 100%);
-    border-right:1px solid rgba(0,0,0,.22);
+      linear-gradient(118deg,
+        rgba(255,255,255,0) 0%, rgba(255,255,255,.30) 15%, rgba(255,255,255,0) 33%,
+        rgba(255,255,255,0) 63%, rgba(255,252,244,.16) 80%, rgba(255,255,255,0) 100%),
+      radial-gradient(140% 70% at 100% -4%, rgba(255,255,255,.58), rgba(255,255,255,0) 46%),
+      radial-gradient(120% 80% at 0% 104%, rgba(86,70,40,.10), rgba(86,70,40,0) 52%),
+      repeating-linear-gradient(90deg,
+        rgba(255,255,255,.22) 0, rgba(255,255,255,.22) .5px,
+        rgba(120,124,132,.05) 1px, rgba(120,124,132,.05) 1.5px,
+        rgba(255,255,255,.10) 2px, rgba(70,76,86,.06) 3px),
+      linear-gradient(180deg, #ecede9 0%, #d9dad5 30%, #cdccc5 62%, #bdbcb3 100%);
+    border-right:1px solid rgba(60,52,32,.30);
     box-shadow:
-      inset -18px 0 34px rgba(0,0,0,.10),
-      inset 1px 0 0 rgba(255,255,255,.75);
+      inset 0 2px 0 rgba(255,255,255,.85),
+      inset 1px 0 0 rgba(255,255,255,.7),
+      inset 0 -22px 40px rgba(56,48,30,.12),
+      inset -16px 0 30px rgba(40,36,24,.07),
+      6px 0 18px rgba(0,0,0,.22);
   }
+
+  /* ---- SCREWS — small domed metal fasteners recessed into the faceplate corners
+     (+ flanking the wordmark). Pure CSS: a domed brushed-brass head via a
+     radial-gradient with a top-left specular highlight, a straight slot (::before),
+     a recessed socket rim + a bright bevel of the recess + a drop shadow so each
+     sits IN the plate. Decorative (aria-hidden, pointer-events:none); injected by
+     JS so the markup + tests stay untouched. Positioned for desktop rail corners
+     AND mobile sheet corners via .tl/.tr/.bl/.br. */
+  /* a fixed, non-scrolling overlay matching the rail so the corner screws stay
+     pinned to the visible faceplate (the .topbar itself scrolls internally). */
+  .screwlayer{
+    position:fixed;
+    left:0;top:0;bottom:0;
+    width:var(--panel-w);
+    z-index:6;
+    pointer-events:none;
+  }
+  body.barhidden .screwlayer{ display:none; }
+  .screw{
+    position:absolute;
+    width:13px;height:13px;
+    border-radius:50%;
+    z-index:6;
+    pointer-events:none;
+    background:
+      radial-gradient(circle at 36% 30%, #f6e9bd 0%, #ddc079 24%, #b9953f 52%, #8c6e2b 78%, #6e5320 100%);
+    box-shadow:
+      inset 0 1px 1px rgba(255,248,220,.85),
+      inset 0 -2px 3px rgba(60,42,12,.6),
+      inset 0 0 0 1.4px rgba(74,56,24,.5),
+      0 0 0 1px rgba(255,255,255,.55),
+      0 1.5px 2px rgba(0,0,0,.42);
+  }
+  .screw::before{
+    content:"";
+    position:absolute;
+    left:50%;top:50%;
+    width:9px;height:2px;
+    border-radius:1px;
+    transform:translate(-50%,-50%) rotate(34deg);
+    background:linear-gradient(180deg, rgba(40,28,8,.82) 0%, rgba(40,28,8,.85) 55%, rgba(255,246,214,.5) 100%);
+    box-shadow:0 1px 0 rgba(255,248,220,.3);
+  }
+  .screw.tl{ left:10px; top:12px; }
+  .screw.tr{ right:10px; top:12px; }
+  .screw.bl{ left:10px; bottom:12px; }
+  .screw.br{ right:10px; bottom:12px; }
   .topbar::-webkit-scrollbar{width:7px;height:7px}
   .topbar::-webkit-scrollbar-thumb{background:rgba(16,16,16,.22);border-radius:7px}
   .topbar::-webkit-scrollbar-track{background:transparent}
@@ -183,21 +244,38 @@
     gap:14px;
     justify-content:flex-start;
   }
+  /* ---- RECESSED BAYS — each control group reads as a shallow machined recess
+     milled into the faceplate: an inset top-left shadow + a hairline bottom-right
+     highlight (so light from above catches the lower lip), a faint inner darkening,
+     a hairline warm border, and comfortable internal padding. Subtle + consistent. */
   .group{
     display:flex;
     flex-direction:column;
     align-items:stretch;
-    gap:6px;
+    gap:7px;
+    padding:11px 12px 12px;
+    border-radius:10px;
+    border:1px solid rgba(58,50,30,.14);
+    background:
+      linear-gradient(180deg, rgba(70,62,40,.05) 0%, rgba(255,255,255,0) 16%),
+      linear-gradient(180deg, rgba(0,0,0,.018) 0%, rgba(255,255,255,.05) 100%);
+    box-shadow:
+      inset 1px 2px 4px rgba(48,42,26,.16),       /* recess shadow, top-left */
+      inset -1px -1px 0 rgba(255,255,255,.6),      /* lit lower-right lip */
+      inset 0 1px 0 rgba(255,255,255,.18);
   }
-  /* Fluid section-label typography: 9px, .16em tracking, uppercase, soft ink */
+  /* ---- ENGRAVED LABELS — section labels look etched into the metal: dark ink
+     pressed in, with a pale BOTTOM highlight (text-shadow 0 1px 0 white) so the
+     lower edge of each stroke catches the overhead light like a milled groove. */
   .group > .lab{
     font-size:9px;
-    letter-spacing:.16em;
+    letter-spacing:.18em;
     text-transform:uppercase;
     font-weight:700;
-    color:var(--ink-dim);
+    color:rgba(36,30,16,.74);
     opacity:1;
     user-select:none;
+    text-shadow:0 1px 0 rgba(255,255,255,.7);
   }
 
   /* ---- EMBOSSED METAL TILES — raised, tactile button tiles, IDENTICAL to
@@ -422,6 +500,11 @@
     margin:0;padding:0;
     overflow:hidden;
   }
+  /* ---- BRASS KNOBS — realistic machined brass dials to match the gold tiles. The
+     outer .knob is the KNURLED RIM: a brushed-brass radial dome with a fine notched
+     edge (a conic-gradient knurl ring) + a soft contact/AO shadow under it so it
+     sits ON the plate. ::before is the inset brass CAP (top-left specular highlight),
+     and .knob-dial::after (untouched logic) carries the dark INDICATOR line. */
   .knob{
     width:46px;height:46px;
     position:relative;
@@ -429,25 +512,31 @@
     cursor:pointer;
     touch-action:none;
     -webkit-user-select:none;user-select:none;
-    /* dark brushed-metal dial: glossy top rim, deep recessed face */
+    /* knurled brass rim: a notched conic ring over a brushed-brass dome */
     background:
-      radial-gradient(circle at 50% 32%, rgba(255,255,255,.16), rgba(255,255,255,0) 46%),
-      radial-gradient(circle at 50% 50%, #2b2d36 0%, #1a1b22 58%, #0d0e13 100%);
+      repeating-conic-gradient(from 0deg,
+        rgba(255,244,206,.55) 0deg 2deg, rgba(120,90,34,.5) 2deg 4deg),
+      radial-gradient(circle at 50% 36%, #f3e2ac 0%, #d8b563 30%, #b48f3c 60%, #8a6a28 100%);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.16),
-      inset 0 -6px 12px rgba(0,0,0,.6),
-      0 3px 7px rgba(0,0,0,.55),
-      0 1px 0 rgba(255,255,255,.06);
+      inset 0 1px 1px rgba(255,250,224,.7),
+      inset 0 -3px 6px rgba(70,48,12,.5),
+      0 4px 8px rgba(54,38,10,.42),               /* soft contact/AO shadow */
+      0 1px 0 rgba(255,250,224,.4);
   }
   .knob::before{
-    /* recessed glass face inside a thin chrome rim */
+    /* inset brushed-brass CAP inside the knurled rim, lit from top-left */
     content:"";
-    position:absolute;inset:8px;
+    position:absolute;inset:7px;
     border-radius:50%;
-    background:radial-gradient(circle at 46% 34%, #23242c, #121319 70%, #0a0b10 100%);
+    background:
+      radial-gradient(circle at 38% 30%, rgba(255,250,228,.9), rgba(255,250,228,0) 40%),
+      repeating-linear-gradient(90deg, rgba(255,248,220,.10) 0 1px, rgba(120,92,36,.08) 1px 2px),
+      radial-gradient(circle at 50% 52%, #e7cd84 0%, #c8a052 46%, #9c7833 82%, #7a5c26 100%);
     box-shadow:
-      inset 0 1px 2px rgba(0,0,0,.7),
-      inset 0 0 0 1px rgba(255,255,255,.05);
+      inset 0 1px 1px rgba(255,250,228,.7),
+      inset 0 -2px 4px rgba(70,48,12,.45),
+      inset 0 0 0 1px rgba(80,58,22,.4),
+      0 1px 1px rgba(0,0,0,.25);
   }
   /* rotating indicator: a layer that turns; the white dot sits near its top */
   .knob-dial{
@@ -458,14 +547,18 @@
     transition:transform .06s linear;
   }
   .knob-dial::after{
+    /* INDICATOR — a dark engraved line milled into the brass cap from the rim
+       inward, with a pale lower edge so it reads as a recessed groove. */
     content:"";
     position:absolute;
-    left:50%;top:6px;
-    width:5px;height:5px;
-    margin-left:-2.5px;
-    border-radius:50%;
-    background:#f5f5f6;
-    box-shadow:0 0 4px rgba(245,245,246,.6), 0 1px 1px rgba(0,0,0,.6);
+    left:50%;top:8px;
+    width:2.5px;height:9px;
+    margin-left:-1.25px;
+    border-radius:1.5px;
+    background:linear-gradient(180deg, #3a2a0c 0%, #25190a 100%);
+    box-shadow:
+      0 1px 0 rgba(255,248,220,.5),
+      inset 0 0 0 .5px rgba(20,12,2,.6);
   }
   .knoblabel{
     text-align:center;
@@ -476,14 +569,16 @@
     font-size:8px;
     letter-spacing:.16em;
     text-transform:uppercase;
-    opacity:.55;
+    color:rgba(36,30,16,.66);
+    text-shadow:0 1px 0 rgba(255,255,255,.65);
   }
   .knoblabel .val{
     display:block;
     font-size:11px;
     font-weight:700;
     font-variant-numeric:tabular-nums;
-    opacity:.92;
+    color:rgba(30,24,12,.95);
+    text-shadow:0 1px 0 rgba(255,255,255,.6);
     margin-top:1px;
   }
 
@@ -839,6 +934,8 @@
       padding:12px 16px 18px;
     }
     .bgtoggle{ top:10px; right:10px; }   /* stays over the art (top-right) */
+    /* screws track the bottom-sheet faceplate (full width, below the art) */
+    .screwlayer{ left:0; right:0; top:var(--art-h); bottom:0; width:100vw; }
     .controls{ gap:12px; }
     /* flex-wrap the metal tiles + knobs so they adapt to ANY width and never clip */
     .tabs, .tabs.cols2{ display:flex; flex-wrap:wrap; gap:6px; }
@@ -899,7 +996,7 @@
          (matrix/plasma/donut) cut to the letter mask. -->
     <div class="group" id="grp-words">
       <span class="lab" id="lab-word-text">Text</span>
-      <input type="text" class="wordfield" id="word-text" value="ASCII" maxlength="48"
+      <input type="text" class="wordfield" id="word-text" value="ASCII" maxlength="64"
              autocomplete="off" autocapitalize="characters" spellcheck="false"
              aria-labelledby="lab-word-text" aria-label="Words to render as ASCII"
              placeholder="type your words…">
@@ -1080,6 +1177,23 @@
   var canvas = document.getElementById('art');
   var ctx = canvas.getContext('2d', { alpha: false });
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---- inject decorative SCREWS into the faceplate corners (purely cosmetic,
+     CSS-styled; aria-hidden so they're invisible to AT and don't touch the DOM
+     the tests assert on). Four corners read on BOTH desktop (rail corners) and
+     mobile (bottom-sheet corners) since .topbar is the fixed faceplate in both. */
+  (function addScrews(){
+    if (!document.querySelector('.topbar')) return;
+    var layer = document.createElement('div');
+    layer.className = 'screwlayer';
+    layer.setAttribute('aria-hidden', 'true');
+    ['tl','tr','bl','br'].forEach(function(pos){
+      var s = document.createElement('span');
+      s.className = 'screw ' + pos;
+      layer.appendChild(s);
+    });
+    document.body.appendChild(layer);
+  })();
 
   /* ---------- configuration tables ---------- */
 
@@ -2454,6 +2568,10 @@
   // is microscopic on one line (multi-line is many× bigger) so it wraps. Multi-
   // word phrases always wrap by the pure maximize rule (sentence wraps word-by-word).
   var SINGLE_WRAP_GAIN = 1.8;
+  // bias toward FEWER lines (more characters per row): take the fewest-line layout
+  // whose glyph size is still within this fraction of the size-maximizing best, so
+  // text fills the width (esp. on a wide desktop) instead of stacking eagerly.
+  var WRAP_KEEP = 0.7;
   function chooseWrap(words, charAspect, availW, availH, cap) {
     if (availW <= 0 || availH <= 0) return { lines: [words.join(' ')], size: 0, L: 1 };
     var hardCap = Math.min(cap, Math.max(1, words.length === 1 ? words[0].length : 64));
@@ -2467,15 +2585,22 @@
     }
     var single = (words.length === 1);
     var one = evalL(1);
-    var best = null;
+    var best = null, cands = [];
     for (var L = 1; L <= hardCap; L++) {
       var cand = evalL(L);
+      cands.push(cand);
       if (!best || cand.size > best.size + 1e-6) best = cand;
       if (cand.L < L) break; // ran out of content to split
     }
+    // prefer the FEWEST lines (most characters per row) that still keep the glyphs
+    // within WRAP_KEEP of the biggest achievable size (cands are in increasing-L order)
+    var pick = best;
+    for (var i = 0; i < cands.length; i++) {
+      if (cands[i].size >= best.size * WRAP_KEEP) { pick = cands[i]; break; }
+    }
     // single token stays on one line unless wrapping is a big legibility win
-    if (single && best.size < one.size * SINGLE_WRAP_GAIN) return one;
-    return best;
+    if (single && pick.size < one.size * SINGLE_WRAP_GAIN) return one;
+    return pick;
   }
 
   var Words = (function () {
