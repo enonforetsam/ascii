@@ -586,6 +586,13 @@
     animation:recpulse .9s ease-in-out infinite;
   }
   @keyframes recpulse{50%{opacity:.25}}
+  /* clip ready — green "Save to Photos" state (iOS share-sheet save on the next tap) */
+  .tab.saveready{
+    border-color:#1f9d55;
+    color:#d7ffe9;
+    background-image:linear-gradient(180deg, #143b29 0%, #0f2c1f 55%, #0a1f16 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(31,157,85,.55), 0 0 9px rgba(31,157,85,.4);
+  }
   .tab[aria-disabled="true"], .tab:disabled{
     opacity:.4;
     cursor:not-allowed;
@@ -3177,24 +3184,100 @@
     }, 'image/png');
   }
 
-  /* ---------- WEBM recording ---------- */
+  /* ---------- clip recording (MP4 on touch/share, WebM on desktop) ---------- */
   var REC_SUPPORTED = !!(typeof MediaRecorder !== 'undefined' &&
                          canvas.captureStream && window.Blob && window.URL);
   var mediaRec = null, recChunks = null, recTimer = 0, recCountTimer = 0, recording = false;
+  var recMime = '';            // mime of the IN-PROGRESS recording (drives the onstop Blob + ext)
+  var pendingClip = null;      // a finished clip waiting for a fresh user tap to share (iOS)
+
+  /* iOS Safari only saves a video to Photos through the share sheet, and navigator.share MUST
+     run inside a live tap. A recording finishes asynchronously (onstop), so sharing from there is
+     outside the gesture and silently fails. On touch/share devices we record H.264 MP4 (Photos
+     refuses WebM) and stash the clip, turning the rec button into a green "Save to Photos" — the
+     user's tap on it is a fresh gesture, so the share sheet (and "Save Video") works. */
+  function pickRecMime() {
+    /* explicit H.264 first on a touch/share device: bare 'video/mp4' can mux VP9, which
+       QuickTime/Photos refuse to open. Desktop stays on WebM (works + smaller). */
+    var prefs = isTouchShare()
+      ? ['video/mp4;codecs=avc1.64002A', 'video/mp4;codecs=avc1.42E01E',
+         'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+      : ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'];
+    for (var i = 0; i < prefs.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported &&
+          MediaRecorder.isTypeSupported(prefs[i])) {
+        return prefs[i];
+      }
+    }
+    return '';
+  }
+  function isTouchShare() {
+    return !!(navigator.canShare && window.File &&
+              window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  }
+  function shareOrDownload(blob, name) {
+    if (navigator.canShare && window.File) {
+      try {
+        var file = new File([blob], name, { type: blob.type });
+        if (navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file] }).then(
+            function () { toast('shared to Photos'); },
+            function (err) {
+              if (err && err.name === 'AbortError') { toast('share cancelled'); }
+              else { downloadBlob(blob, name); toast('saved ' + name.split('.').pop()); }
+            }
+          );
+          return;
+        }
+      } catch (e) {}
+    }
+    downloadBlob(blob, name);
+    toast('saved ' + name.split('.').pop());
+  }
+  function clearSaveReady() {
+    pendingClip = null;
+    if (btnRec) { btnRec.classList.remove('saveready'); }
+    setRecUI(false);
+  }
+  function deliverClip(blob, name) {
+    if (isTouchShare()) {
+      pendingClip = { blob: blob, name: name };
+      if (btnRec) {
+        btnRec.classList.remove('recording');
+        btnRec.classList.add('saveready');
+        btnRec.textContent = 'Save to Photos';
+        btnRec.setAttribute('aria-pressed', 'false');
+        btnRec.setAttribute('aria-label', 'Save clip to your Photos');
+      }
+      toast('tap Save to add to your Photos');
+    } else {
+      downloadBlob(blob, name);
+      toast('saved ' + name.split('.').pop());
+    }
+  }
+  function savePendingClip() {
+    var c = pendingClip; pendingClip = null;
+    clearSaveReady();        // resets the button UI back to 'rec'
+    shareOrDownload(c.blob, c.name);   // runs inside this tap → iOS opens the share sheet
+  }
 
   function startRec() {
     if (!REC_SUPPORTED) { toast('recording unavailable'); return; }
+    if (pendingClip) clearSaveReady();   // a new recording supersedes any waiting clip
     try {
       var stream = canvas.captureStream(30);
       recChunks = [];
-      mediaRec = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      recMime = pickRecMime();
+      mediaRec = recMime ? new MediaRecorder(stream, { mimeType: recMime })
+                         : new MediaRecorder(stream);
       mediaRec.ondataavailable = function (ev) {
         if (ev.data && ev.data.size > 0) recChunks.push(ev.data);
       };
       mediaRec.onstop = function () {
-        var blob = new Blob(recChunks, { type: 'video/webm' });
-        downloadBlob(blob, fname('webm'));
-        toast('saved .webm');
+        var type = recMime || 'video/webm';
+        var blob = new Blob(recChunks, { type: type });
+        var ext = type.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+        deliverClip(blob, fname(ext));
         recChunks = null;
       };
       mediaRec.start();
@@ -3223,7 +3306,10 @@
     recording = false;
     setRecUI(false);
   }
-  function toggleRec() { if (recording) stopRec(); else startRec(); }
+  function toggleRec() {
+    if (pendingClip) { savePendingClip(); return; }   // a clip is waiting → this tap saves it
+    if (recording) stopRec(); else startRec();
+  }
 
   /* ---------- main loop ---------- */
 
@@ -3619,8 +3705,10 @@
   /* ---------- record button active state ---------- */
   function setRecUI(on) {
     if (!btnRec) return;
+    btnRec.classList.remove('saveready');   // leaving any "Save to Photos" state
     btnRec.setAttribute('aria-pressed', on ? 'true' : 'false');
     btnRec.textContent = on ? '■ 15' : 'rec';
+    btnRec.setAttribute('aria-label', on ? 'Stop recording' : 'Record a clip');
     btnRec.classList.toggle('recording', !!on);
     if (!on) { window.clearInterval(recCountTimer); recCountTimer = 0; }
   }
@@ -3781,6 +3869,9 @@
   }
 
   function syncControls() {
+    // a mode/engine/look change supersedes any clip waiting to be saved — drop it so the
+    // rec button doesn't keep offering to save a clip from the old look.
+    if (pendingClip && !recording && typeof clearSaveReady === 'function') clearSaveReady();
     // TOP-LEVEL MODE (state.mode): drive the body class (CSS swaps the control
     // set) + the 3-way mode toggle's pressed state.
     var m = state.mode;
