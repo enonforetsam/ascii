@@ -265,6 +265,18 @@
     background-image:linear-gradient(180deg, #ffffff 0%, #f6f6f7 60%, #eaeaec 100%);
   }
 
+  /* MODE SWITCH — the PRIMARY selector. Set apart from the row of sub-tabs below as
+     taller icon-over-label cards, each with a DISTINCT icon (sparkle / photo / type),
+     so the top-level mode is instantly readable and the three no longer look alike. */
+  .modeswitch{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:7px; }
+  .modeswitch .tab{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:5px; min-height:58px; padding:9px 4px;
+    font-size:9px; letter-spacing:.11em; text-transform:uppercase;
+  }
+  .modeswitch .mico{ width:21px; height:21px; display:block; opacity:.9; pointer-events:none; }
+  .modeswitch .tab[aria-pressed="true"] .mico{ opacity:1; }
+
   /* ---- LOOK SWATCHES — each LOOK is a SQUARE mini-swatch made of characters:
      buildLookSwatches() fills a tile with a patch of that look's own charset
      ramp, tinted to its palette (solid ink, or a clipped gradient for the
@@ -810,6 +822,9 @@
     /* flex-wrap the metal tiles + knobs so they adapt to ANY width and never clip */
     .tabs, .tabs.cols2{ display:flex; flex-wrap:wrap; gap:6px; }
     .tabs .tab, .tabs .btn{ flex:1 1 96px; }
+    /* keep the primary MODE switch a tidy 3-across row even on phones */
+    .modeswitch{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .modeswitch .tab{ flex:initial; }
     .looksgrid{ grid-template-columns:repeat(auto-fill, minmax(72px, 1fr)); }
     .knobgrid{ display:flex; flex-wrap:wrap; gap:14px 20px; justify-content:flex-start; }
     .knobctl{ flex:0 0 auto; }
@@ -842,9 +857,18 @@
     <div class="group">
       <span class="lab" id="lab-mode">Mode</span>
       <div class="tabs modeswitch" id="seg-mode" role="group" aria-labelledby="lab-mode">
-        <button class="tab" id="mode-gen" data-mode="generative" type="button" aria-pressed="true" aria-label="Generative mode — donut, matrix, plasma engines">Generative</button>
-        <button class="tab" id="mode-img" data-mode="image" type="button" aria-pressed="false" aria-label="Image mode — convert a loaded image to ASCII">Image</button>
-        <button class="tab" id="mode-words" data-mode="words" type="button" aria-pressed="false" aria-label="Words mode — type text rendered as ASCII">Words</button>
+        <button class="tab" id="mode-gen" data-mode="generative" type="button" aria-pressed="true" aria-label="Generative mode — donut, matrix, plasma engines">
+          <svg class="mico" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l1.75 5.95 5.95 1.75-5.95 1.75L12 17.9l-1.75-5.95L4.3 10.2l5.95-1.75z"/><path fill="currentColor" opacity=".6" d="M18.8 3.1l.62 2.08 2.08.62-2.08.62-.62 2.08-.62-2.08-2.08-.62 2.08-.62z"/></svg>
+          <span>Generative</span>
+        </button>
+        <button class="tab" id="mode-img" data-mode="image" type="button" aria-pressed="false" aria-label="Image mode — convert a loaded image to ASCII">
+          <svg class="mico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.7"/><path d="M21 16.5l-5-4-4.5 4.5L9 14.5l-6 4.5"/></svg>
+          <span>Image</span>
+        </button>
+        <button class="tab" id="mode-words" data-mode="words" type="button" aria-pressed="false" aria-label="Words mode — type text rendered as ASCII">
+          <svg class="mico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14M12 6.5V19M9 19h6"/></svg>
+          <span>Words</span>
+        </button>
       </div>
     </div>
 
