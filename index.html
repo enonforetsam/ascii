@@ -98,6 +98,7 @@
     position:fixed;
     left:0;top:0;bottom:0;
     width:var(--panel-w);
+    transition:transform .24s cubic-bezier(.4,0,.2,1);  /* seamless rail slide */
     z-index:4;
     display:flex;
     flex-direction:column;
@@ -481,7 +482,9 @@
   }
   /* hidden state: collapse the rail to 0 so the stage expands full-width */
   body.barhidden{ --panel-w:0px; }
-  body.barhidden .topbar{ display:none; }
+  body.barhidden .topbar{ width:clamp(224px, 23vw, 300px); transform:translateX(-101%); }   /* slide out, don't collapse */
+  /* reduced-motion: skip the slide, hide instantly (and ensures the panel always hides) */
+  @media (prefers-reduced-motion: reduce){ body.barhidden .topbar{ display:none; transform:none; } }
   body.barhidden .reveal{ display:none; }   /* the rail-edge handle reopens it now */
 
   /* RAIL collapse HANDLE — a slim tab on the rail's right edge, vertically centred,
@@ -504,7 +507,7 @@
     font:700 13px/1 var(--mono);
     border-radius:0 4px 4px 0;
     box-shadow:2px 0 7px rgba(0,0,0,.45);
-    transition:left .2s ease, background .12s ease, color .12s ease;
+    transition:left .24s cubic-bezier(.4,0,.2,1), background .12s ease, color .12s ease;
   }
   .railtoggle:hover{ background:#24242c; color:#fff; }
   .railtoggle:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
