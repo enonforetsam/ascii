@@ -107,32 +107,32 @@
     overflow-y:auto;
     overscroll-behavior:contain;
     scrollbar-width:thin;                              /* super-thin scrollbar (Firefox) */
-    scrollbar-color:rgba(57,255,106,.3) transparent;
+    scrollbar-color:rgba(255,255,255,.3) transparent;
     /* CYBERPUNK / MATRIX panel — refined + restrained. A CALM near-black surface
-       with ONE neon-green accent (#39ff6a) and a single hairline border. No circuit
+       with ONE neon-green accent (#ffffff) and a single hairline border. No circuit
        grid, no scanline texture, no cyan wash — the controls do the talking. Tokens
        are overridden locally to a dark terminal palette so every control resolves
        neon-green-on-charcoal, while the stage/art keeps its active theme. */
-    --ink:#d4ffe1;                         /* bright terminal text */
-    --ink-rgb:212,255,225;
-    --ink-dim:rgba(120,230,160,.55);       /* dimmed neon-green */
-    --neon:#39ff6a;                        /* the single accent — phosphor green */
-    --neon-rgb:57,255,106;
-    --glow:0 0 6px rgba(57,255,106,.45);
-    --ctl-glow:0 0 8px rgba(57,255,106,.35);
-    --line:rgba(57,255,106,.18);
-    --accent:#39ff6a;
-    --panel-metal:#070a0c;
+    --ink:#eaeaea;                         /* bright terminal text */
+    --ink-rgb:230,230,230;
+    --ink-dim:rgba(160,160,160,.55);       /* dimmed neon-green */
+    --neon:#ffffff;                        /* the single accent — phosphor green */
+    --neon-rgb:255,255,255;
+    --glow:0 0 6px rgba(255,255,255,.45);
+    --ctl-glow:0 0 8px rgba(255,255,255,.35);
+    --line:rgba(255,255,255,.18);
+    --accent:#ffffff;
+    --panel-metal:#0a0a0b;
     color:var(--ink);
     text-shadow:none;
     /* a calm dark vertical gradient — no texture, no competing washes */
     background-color:var(--panel-metal);
-    background-image:linear-gradient(180deg, #0a0f11 0%, #070a0c 100%);
-    border-right:1px solid rgba(57,255,106,.16);
+    background-image:linear-gradient(180deg, #131315 0%, #0a0a0b 100%);
+    border-right:1px solid rgba(255,255,255,.16);
   }
 
   .topbar::-webkit-scrollbar{width:4px;height:4px}     /* super thin */
-  .topbar::-webkit-scrollbar-thumb{background:rgba(57,255,106,.3);border-radius:2px}
+  .topbar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.3);border-radius:2px}
   .topbar::-webkit-scrollbar-track{background:transparent}
   /* Wordmark: uppercase, tracked neon green with a restrained glow — the one place
      (besides the active tile) where glow is allowed. */
@@ -142,8 +142,8 @@
     letter-spacing:.24em;
     text-transform:uppercase;
     line-height:1;
-    color:#e6fff0;
-    text-shadow:0 0 7px rgba(57,255,106,.5);
+    color:#eeeeee;
+    text-shadow:0 0 7px rgba(255,255,255,.5);
     white-space:nowrap;
     flex:0 0 auto;
   }
@@ -153,7 +153,7 @@
     margin-left:.18em;
     vertical-align:-.08em;
     background:var(--neon);
-    box-shadow:0 0 5px rgba(57,255,106,.55);
+    box-shadow:0 0 5px rgba(255,255,255,.55);
     animation:blink 1.05s steps(1,end) infinite;
   }
   @keyframes blink{50%{opacity:0}}
@@ -193,8 +193,8 @@
     gap:9px;
     position:relative;
     padding:13px 13px 14px;
-    background:rgba(57,255,106,.018);
-    border:1px solid rgba(57,255,106,.12);
+    background:rgba(255,255,255,.018);
+    border:1px solid rgba(255,255,255,.12);
     border-radius:0;
     clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);  /* sharp HUD corner */
   }
@@ -230,7 +230,7 @@
     font-family:var(--mono);
     font-size:10px;
     letter-spacing:.01em;
-    color:#a7ffc1;
+    color:#c8c8c8;
     width:100%;
     min-height:36px;
     min-width:32px;
@@ -242,35 +242,35 @@
     text-shadow:none;
     border-radius:0;
     clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);  /* sharp HUD corner */
-    border:1px solid rgba(57,255,106,.2);
-    background-color:#0a1210;
+    border:1px solid rgba(255,255,255,.2);
+    background-color:#17171a;
     background-image:none;
     transition:transform .08s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease, border-color .12s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
-    color:#d6ffe2;
-    border-color:rgba(57,255,106,.42);
+    color:#e0e0e0;
+    border-color:rgba(255,255,255,.42);
     background-color:#0e1a16;
   }
   .tab:active, .btn:active{
     transform:translateY(0);
-    background-color:#0a1210;
+    background-color:#17171a;
   }
   /* selected — a clean filled green panel with dark text + a restrained glow */
   .tab[aria-pressed="true"]{
-    color:#04130a;
+    color:#0a0a0a;
     font-weight:700;
     text-shadow:none;
-    border-color:#39ff6a;
-    background-color:#39ff6a;
+    border-color:#ffffff;
+    background-color:#ffffff;
     background-image:none;
-    box-shadow:0 0 10px rgba(57,255,106,.35);
+    box-shadow:0 0 10px rgba(255,255,255,.35);
   }
   .tab[aria-pressed="true"]:hover{
     transform:translateY(-1px);
-    background-color:#4dff7c;
-    box-shadow:0 0 12px rgba(57,255,106,.45);
+    background-color:#f2f2f2;
+    box-shadow:0 0 12px rgba(255,255,255,.45);
   }
 
   /* MODE SWITCH — the PRIMARY selector. Set apart from the row of sub-tabs below as
@@ -370,10 +370,10 @@
   .looktile[aria-pressed="true"]{
     outline:2px solid var(--neon);
     outline-offset:1px;
-    border-color:rgba(57,255,106,.5);
+    border-color:rgba(255,255,255,.5);
     box-shadow:
-      inset 0 0 0 2px rgba(57,255,106,.7),
-      0 0 9px rgba(57,255,106,.35);
+      inset 0 0 0 2px rgba(255,255,255,.7),
+      0 0 9px rgba(255,255,255,.35);
     transform:translateY(-1px);
   }
 
@@ -421,8 +421,8 @@
     -webkit-user-select:none;user-select:none;
     background:radial-gradient(circle at 50% 50%, #0c1410 0%, #080f0c 60%, #060a08 100%);
     box-shadow:
-      inset 0 0 0 1px rgba(57,255,106,.3),
-      0 0 6px rgba(57,255,106,.12);
+      inset 0 0 0 1px rgba(255,255,255,.3),
+      0 0 6px rgba(255,255,255,.12);
   }
   .knob::before{
     /* recessed dark face inside the green rim */
@@ -448,8 +448,8 @@
     width:3.5px;height:8px;
     margin-left:-1.75px;
     border-radius:2px;
-    background:#39ff6a;
-    box-shadow:0 0 4px rgba(57,255,106,.7);
+    background:#ffffff;
+    box-shadow:0 0 4px rgba(255,255,255,.7);
   }
   .knoblabel{
     text-align:center;
@@ -467,7 +467,7 @@
     font-size:11px;
     font-weight:700;
     font-variant-numeric:tabular-nums;
-    color:#c8ffd8;
+    color:#d6d6d6;
     text-shadow:none;
     margin-top:1px;
   }
@@ -607,7 +607,7 @@
   /* clip ready — green "Save to Photos" state (iOS share-sheet save on the next tap) */
   .tab.saveready{
     border-color:#1f9d55;
-    color:#d7ffe9;
+    color:#e0e0e0;
     background-image:linear-gradient(180deg, #143b29 0%, #0f2c1f 55%, #0a1f16 100%);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(31,157,85,.55), 0 0 9px rgba(31,157,85,.4);
   }
@@ -678,22 +678,22 @@
     font-family:var(--mono);
     font-size:13px;
     letter-spacing:.04em;
-    color:#caffd8;
+    color:#d6d6d6;
     width:100%;
     min-height:38px;
     padding:8px 10px;
     border-radius:3px;
-    border:1px solid rgba(57,255,106,.3);
+    border:1px solid rgba(255,255,255,.3);
     background-color:#04090b;
     background-image:linear-gradient(180deg, #050b0d 0%, #03080a 100%);
     box-shadow:
       inset 0 0 8px rgba(0,0,0,.7),
-      inset 0 0 0 1px rgba(57,255,106,.06);
-    text-shadow:0 0 5px rgba(57,255,106,.3);
+      inset 0 0 0 1px rgba(255,255,255,.06);
+    text-shadow:0 0 5px rgba(255,255,255,.3);
     caret-color:var(--neon);
   }
-  .wordfield::placeholder{ color:rgba(110,255,160,.4); }
-  .wordfield:focus-visible{ outline:2px solid var(--neon); outline-offset:2px; box-shadow:inset 0 0 8px rgba(0,0,0,.7), 0 0 10px rgba(57,255,106,.3); }
+  .wordfield::placeholder{ color:rgba(180,180,180,.4); }
+  .wordfield:focus-visible{ outline:2px solid var(--neon); outline-offset:2px; box-shadow:inset 0 0 8px rgba(0,0,0,.7), 0 0 10px rgba(255,255,255,.3); }
 
   /* ---- IMAGE SECTION — two states toggled by body.has-image ---------------
      Default (no image): show .image-empty (the "insert image" button), hide
@@ -728,12 +728,12 @@
     padding:3px;
     border-radius:3px;
     cursor:pointer;
-    border:1px solid rgba(57,255,106,.32);
+    border:1px solid rgba(255,255,255,.32);
     background-color:#05090b;
-    background-image:linear-gradient(180deg, rgba(57,255,106,.06) 0%, rgba(0,0,0,.25) 100%);
+    background-image:linear-gradient(180deg, rgba(255,255,255,.06) 0%, rgba(0,0,0,.25) 100%);
     box-shadow:
       inset 0 0 8px rgba(0,0,0,.5),
-      0 0 6px rgba(57,255,106,.15);
+      0 0 6px rgba(255,255,255,.15);
     transition:transform .07s ease, box-shadow .1s ease, border-color .1s ease;
   }
   .img-thumb img{
@@ -745,17 +745,17 @@
   }
   .img-thumb:hover{
     transform:translateY(-1px);
-    border-color:rgba(57,255,106,.6);
-    box-shadow:inset 0 0 8px rgba(0,0,0,.5), 0 0 12px rgba(57,255,106,.3);
+    border-color:rgba(255,255,255,.6);
+    box-shadow:inset 0 0 8px rgba(0,0,0,.5), 0 0 12px rgba(255,255,255,.3);
   }
   .img-thumb:active{ transform:translateY(1px); }
   /* active = image is the current render: bright neon-green ring */
   .img-thumb[aria-pressed="true"]{
     border-color:var(--neon);
     box-shadow:
-      inset 0 0 0 1px rgba(57,255,106,.8),
-      0 0 0 2px rgba(57,255,106,.45),
-      0 0 14px rgba(57,255,106,.5);
+      inset 0 0 0 1px rgba(255,255,255,.8),
+      0 0 0 2px rgba(255,255,255,.45),
+      0 0 14px rgba(255,255,255,.5);
   }
   .img-thumb:focus-visible{ outline:2px solid var(--neon); outline-offset:2px; }
   @media (prefers-reduced-motion: reduce){
