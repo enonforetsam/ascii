@@ -187,7 +187,8 @@
     padding:13px 13px 14px;
     background:rgba(57,255,106,.018);
     border:1px solid rgba(57,255,106,.12);
-    border-radius:8px;
+    border-radius:0;
+    clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);  /* sharp HUD corner */
   }
   /* ---- SECTION LABELS — clean uppercase tracked green, no markers, no brackets. */
   .group > .lab{
@@ -231,7 +232,8 @@
     text-overflow:clip;
     cursor:pointer;
     text-shadow:none;
-    border-radius:7px;
+    border-radius:0;
+    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);  /* sharp HUD corner */
     border:1px solid rgba(57,255,106,.2);
     background-color:#0a1210;
     background-image:none;
@@ -296,7 +298,8 @@
     overflow:hidden;
     padding:0;
     cursor:pointer;
-    border-radius:8px;
+    border-radius:0;
+    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);  /* sharp HUD corner */
     border:1px solid rgba(0,0,0,.5);
     background:#06060a;            /* per-look stage bg set inline by JS */
     color:#ececef;                /* no-JS fallback: plain name text */
