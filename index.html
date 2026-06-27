@@ -106,6 +106,8 @@
     padding:18px 16px 14px;
     overflow-y:auto;
     overscroll-behavior:contain;
+    scrollbar-width:thin;                              /* super-thin scrollbar (Firefox) */
+    scrollbar-color:rgba(57,255,106,.3) transparent;
     /* CYBERPUNK / MATRIX panel — refined + restrained. A CALM near-black surface
        with ONE neon-green accent (#39ff6a) and a single hairline border. No circuit
        grid, no scanline texture, no cyan wash — the controls do the talking. Tokens
@@ -129,8 +131,8 @@
     border-right:1px solid rgba(57,255,106,.16);
   }
 
-  .topbar::-webkit-scrollbar{width:7px;height:7px}
-  .topbar::-webkit-scrollbar-thumb{background:rgba(57,255,106,.22);border-radius:7px}
+  .topbar::-webkit-scrollbar{width:4px;height:4px}     /* super thin */
+  .topbar::-webkit-scrollbar-thumb{background:rgba(57,255,106,.3);border-radius:2px}
   .topbar::-webkit-scrollbar-track{background:transparent}
   /* Wordmark: uppercase, tracked neon green with a restrained glow — the one place
      (besides the active tile) where glow is allowed. */
@@ -165,6 +167,12 @@
     flex:0 0 auto;
   }
   @media (max-width:720px){ .sub{display:none} }
+  /* narrow desktop windows shrink the rail (it clamps to its 224px min) → shrink the
+     tile text a touch so 8-char labels (standard/phosphor/spectrum/Generative) never clip. */
+  @media (min-width:681px) and (max-width:1120px){
+    .controls .tab, .controls .btn{ font-size:9px; letter-spacing:0; padding:0 3px; }
+    .controls .modeswitch .tab{ font-size:7px; letter-spacing:0; padding:8px 2px; }
+  }
 
   /* controls — stacked vertically inside the rail */
   .controls{
@@ -221,12 +229,12 @@
     -webkit-appearance:none;
     font-family:var(--mono);
     font-size:10px;
-    letter-spacing:.04em;
+    letter-spacing:.01em;
     color:#a7ffc1;
     width:100%;
     min-height:36px;
     min-width:32px;
-    padding:0 7px;
+    padding:0 5px;
     white-space:nowrap;
     overflow:hidden;
     text-overflow:clip;
@@ -272,7 +280,7 @@
   .modeswitch .tab{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:5px; min-height:58px; padding:9px 4px;
-    font-size:9px; letter-spacing:.11em; text-transform:uppercase;
+    font-size:9px; letter-spacing:.04em; text-transform:uppercase;
   }
   .modeswitch .mico{ width:21px; height:21px; display:block; opacity:.9; pointer-events:none; }
   .modeswitch .tab[aria-pressed="true"] .mico{ opacity:1; }
