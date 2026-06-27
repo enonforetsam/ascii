@@ -482,7 +482,33 @@
   /* hidden state: collapse the rail to 0 so the stage expands full-width */
   body.barhidden{ --panel-w:0px; }
   body.barhidden .topbar{ display:none; }
-  body.barhidden .reveal{ display:block; }
+  body.barhidden .reveal{ display:none; }   /* the rail-edge handle reopens it now */
+
+  /* RAIL collapse HANDLE — a slim tab on the rail's right edge, vertically centred,
+     that hides/shows the side panel. It rides left:var(--panel-w), so it auto-slides
+     to the screen edge when the rail collapses (--panel-w -> 0). */
+  .railtoggle{
+    position:fixed;
+    left:var(--panel-w);
+    top:50%;
+    transform:translateY(-50%);
+    z-index:6;
+    width:16px; height:50px;
+    display:flex; align-items:center; justify-content:center;
+    padding:0;
+    border:1px solid rgba(255,255,255,.18);
+    border-left:none;
+    background:#16161b;
+    color:#c4c4c4;
+    cursor:pointer;
+    font:700 13px/1 var(--mono);
+    border-radius:0 4px 4px 0;
+    box-shadow:2px 0 7px rgba(0,0,0,.45);
+    transition:left .2s ease, background .12s ease, color .12s ease;
+  }
+  .railtoggle:hover{ background:#24242c; color:#fff; }
+  .railtoggle:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
+  @media (max-width:680px){ .railtoggle{ display:none; } }   /* no left rail on mobile */
 
   footer{
     position:fixed;
@@ -1050,6 +1076,7 @@
 </header>
 
 <button class="btn reveal" id="btn-show" type="button" aria-label="Show control bar">controls</button>
+<button class="railtoggle" id="rail-toggle" type="button" aria-label="Hide controls" title="Hide / show controls">‹</button>
 
 <footer>
   <span>M2 · copy · share · export · looks</span>
@@ -3718,6 +3745,7 @@
   var valContrast= document.getElementById('val-contrast');
   var btnHide    = document.getElementById('btn-hide');
   var btnShow    = document.getElementById('btn-show');
+  var railToggle = document.getElementById('rail-toggle');
   var segLooks   = document.getElementById('seg-looks');
   var btnCopy    = document.getElementById('act-copy');
   var btnShare   = document.getElementById('act-share');
@@ -4247,19 +4275,23 @@
   function hideBar() {
     document.body.classList.add('barhidden');
     btnHide.setAttribute('aria-pressed', 'true');
-    btnShow.focus();
+    if (railToggle) { railToggle.textContent = '›'; railToggle.setAttribute('aria-label', 'Show controls'); railToggle.focus(); }
     resize();   // stage just grew to full width — re-fit the canvas
     start();    // repaint immediately (reduced-motion has no rAF loop)
   }
   function showBar() {
     document.body.classList.remove('barhidden');
     btnHide.setAttribute('aria-pressed', 'false');
+    if (railToggle) { railToggle.textContent = '‹'; railToggle.setAttribute('aria-label', 'Hide controls'); }
     btnHide.focus();
     resize();   // stage shrank back beside the rail — re-fit the canvas
     start();
   }
   btnHide.addEventListener('click', hideBar);
   btnShow.addEventListener('click', showBar);
+  railToggle.addEventListener('click', function () {
+    if (document.body.classList.contains('barhidden')) showBar(); else hideBar();
+  });
 
   /* ---------- LOOKS / ACTIONS / EXPORT wiring ---------- */
   buildLookSwatches();          // upgrade the LOOK buttons into character swatches
