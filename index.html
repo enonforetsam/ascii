@@ -689,21 +689,13 @@
      light-on-creme with a dark hairline and a clearly-popping active state. The
      slant clip-path geometry is shared, so the sharp corners + outline survive. */
   body[data-bg="creme"] .topbar{
-    /* light faceplate: soft creme/off-white with a subtle vertical gradient + a
-       fine dark hairline border */
-    --ink:#1a1a1c;                         /* dark panel text */
-    --ink-rgb:26,26,28;
-    --ink-dim:rgba(60,60,64,.62);          /* dimmed dark label */
-    --neon:#16161a;                        /* the accent on light = near-black */
-    --neon-rgb:22,22,26;
-    --glow:none;
-    --ctl-glow:none;
-    --line:rgba(20,20,24,.16);
-    --accent:#16161a;
-    --panel-metal:#ecece7;
-    color:var(--ink);
+    /* ONLY the sidebar SURFACE goes light. The control TOKENS are deliberately left
+       at their dark values so the buttons/tiles/active-state/knobs keep their normal
+       (dark) design — just the panel-surface TEXT below is darkened so it stays
+       readable on creme. */
+    color:#26262a;
     text-shadow:none;
-    background-color:var(--panel-metal);
+    background-color:#ecece7;
     background-image:linear-gradient(180deg, #f3f3ee 0%, #e6e6e0 100%);
     border-right:1px solid rgba(20,20,24,.18);
     scrollbar-color:rgba(20,20,24,.34) transparent;   /* dark thin thumb (Firefox) */
@@ -732,136 +724,14 @@
     opacity:.92;
   }
 
-  /* TILES (.tab/.btn) — light fill + a DARK hairline outline; the slant outline
-     stays visible on the diagonal because it's painted as the element background. */
-  body[data-bg="creme"] .tab,
-  body[data-bg="creme"] .btn{
-    color:#2a2a2e;
-    text-shadow:none;
-    --tab-outline:rgba(20,20,24,.42);   /* dark hairline (follows the slant) */
-    --tab-fill:#f6f6f1;                  /* light face */
-  }
-  body[data-bg="creme"] .tab:hover,
-  body[data-bg="creme"] .btn:hover{
-    color:#101012;
-    --tab-outline:rgba(20,20,24,.6);
-    --tab-fill:#ffffff;
-  }
-  body[data-bg="creme"] .tab:active,
-  body[data-bg="creme"] .btn:active{
-    --tab-fill:#ececE6;
-  }
-  /* ACTIVE — a DARK filled tile with LIGHT text so it POPS vs the light inactives */
-  body[data-bg="creme"] .tab[aria-pressed="true"]{
-    color:#f7f7f4;
-    font-weight:700;
-    text-shadow:none;
-    --tab-outline:rgba(0,0,0,.7);
-    --tab-fill:#1b1b1f;
-    box-shadow:0 1px 5px rgba(20,20,24,.28);
-  }
-  body[data-bg="creme"] .tab[aria-pressed="true"]:hover{
-    --tab-fill:#28282d;
-    box-shadow:0 2px 7px rgba(20,20,24,.34);
-  }
-  body[data-bg="creme"] .modeswitch .tab[aria-pressed="true"] .mico{ opacity:1; }
-
-  /* LOOK SWATCHES — dark hairline + dark selected ring on light */
-  body[data-bg="creme"] .looktile{
-    background:rgba(20,20,24,.4);   /* this layer IS the outline (dark hairline) */
-    box-shadow:0 1px 4px rgba(20,20,24,.22);
-  }
-  body[data-bg="creme"] .looktile:hover{
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.18),
-      0 4px 9px rgba(20,20,24,.26);
-  }
-  body[data-bg="creme"] .looktile[aria-pressed="true"]{
-    outline:2px solid #1b1b1f;
-    outline-offset:1px;
-    background:rgba(20,20,24,.78);
-    box-shadow:
-      inset 0 0 0 2px rgba(20,20,24,.6),
-      0 0 0 1px rgba(255,255,255,.5),
-      0 1px 6px rgba(20,20,24,.3);
-  }
-
-  /* KNOBS — a light dial with a DARK ring + DARK indicator so they read on light */
-  body[data-bg="creme"] .knob{
-    background:radial-gradient(circle at 50% 50%, #fdfdf9 0%, #ededE7 60%, #e3e3dc 100%);
-    box-shadow:
-      inset 0 0 0 1px rgba(20,20,24,.34),
-      0 1px 3px rgba(20,20,24,.18);
-  }
-  body[data-bg="creme"] .knob::before{
-    background:radial-gradient(circle at 46% 34%, #fbfbf6, #ededE6 72%, #e0e0d8 100%);
-    box-shadow:inset 0 0 4px rgba(20,20,24,.22);
-  }
-  body[data-bg="creme"] .knob-dial::after{
-    background:#1b1b1f;
-    box-shadow:none;
-  }
-  body[data-bg="creme"] .knoblabel .knm{ color:rgba(60,60,64,.72); }
+  /* NOTE: light mode does NOT touch the tiles/buttons/active-state, knobs, look
+     swatches, words input, image thumb, rail handle or focus rings — they keep their
+     normal dark design (only the sidebar SURFACE + the text on it changes colour).
+     Knob labels still darken so they read on the creme faceplate. */
+  body[data-bg="creme"] .knoblabel .knm{ color:rgba(60,60,64,.78); }
   body[data-bg="creme"] .knoblabel .val{ color:#1c1c20; text-shadow:none; }
 
-  /* WORDS input — light recessed slot with dark ink */
-  body[data-bg="creme"] .wordfield{
-    color:#1c1c20;
-    border:1px solid rgba(20,20,24,.32);
-    background-color:#fbfbf6;
-    background-image:linear-gradient(180deg, #ffffff 0%, #f1f1ec 100%);
-    box-shadow:
-      inset 0 1px 3px rgba(20,20,24,.12),
-      inset 0 0 0 1px rgba(255,255,255,.5);
-    text-shadow:none;
-    caret-color:#1b1b1f;
-  }
-  body[data-bg="creme"] .wordfield::placeholder{ color:rgba(60,60,64,.42); }
-  body[data-bg="creme"] .wordfield:focus-visible{
-    outline:2px solid #1b1b1f; outline-offset:2px;
-    box-shadow:inset 0 1px 3px rgba(20,20,24,.12);
-  }
-
-  /* IMAGE thumbnail — light frame */
-  body[data-bg="creme"] .img-thumb{
-    border:1px solid rgba(20,20,24,.3);
-    background-color:#fbfbf6;
-    background-image:linear-gradient(180deg, rgba(255,255,255,.8) 0%, rgba(20,20,24,.06) 100%);
-    box-shadow:
-      inset 0 1px 3px rgba(20,20,24,.1),
-      0 1px 3px rgba(20,20,24,.16);
-  }
-  body[data-bg="creme"] .img-thumb:hover{
-    border-color:rgba(20,20,24,.55);
-    box-shadow:inset 0 1px 3px rgba(20,20,24,.1), 0 2px 7px rgba(20,20,24,.24);
-  }
-  body[data-bg="creme"] .img-thumb[aria-pressed="true"]{
-    border-color:#1b1b1f;
-    box-shadow:
-      inset 0 0 0 1px rgba(20,20,24,.5),
-      0 0 0 2px rgba(20,20,24,.3),
-      0 1px 6px rgba(20,20,24,.26);
-  }
-
-  /* RAIL collapse HANDLE — light tab on light */
-  body[data-bg="creme"] .railtoggle{
-    border:1px solid rgba(20,20,24,.2);
-    border-left:none;
-    background:#e6e6e0;
-    color:#2a2a2e;
-    box-shadow:2px 0 6px rgba(20,20,24,.18);
-  }
-  body[data-bg="creme"] .railtoggle:hover{ background:#d9d9d2; color:#101012; }
-  body[data-bg="creme"] .railtoggle:focus-visible{ outline:2px solid #1b1b1f; }
-
-  /* focus rings + footer text readable on light */
-  body[data-bg="creme"] .tab:focus-visible,
-  body[data-bg="creme"] .btn:focus-visible,
-  body[data-bg="creme"] .looktile:focus-visible,
-  body[data-bg="creme"] .knob:focus-visible,
-  body[data-bg="creme"] .topbar input:focus-visible{
-    outline:2px solid #1b1b1f;
-  }
+  /* footer text (over the creme stage) -> dark so it reads */
   body[data-bg="creme"] footer{ color:rgba(40,40,44,.72); }
 
   /* CORNER CONTROLS over the creme stage — darken the translucent pill bg/border +
