@@ -167,7 +167,18 @@
     white-space:nowrap;
     flex:0 0 auto;
   }
-  @media (max-width:720px){ .sub{display:none} }
+  /* descriptive subtitle under the title (Fluid-style) — what the tool does */
+  .desc{
+    font-size:11px;
+    line-height:1.5;
+    letter-spacing:.005em;
+    text-transform:none;
+    color:var(--ink-dim);
+    text-shadow:none;
+    margin-top:8px;
+    max-width:34ch;
+  }
+  @media (max-width:720px){ .sub, .desc{display:none} }
   /* narrow desktop windows shrink the rail (it clamps to its 224px min) → shrink the
      tile text a touch so 8-char labels (standard/phosphor/spectrum/Generative) never clip. */
   @media (min-width:681px) and (max-width:1120px){
@@ -712,6 +723,7 @@
     box-shadow:none;
   }
   body[data-bg="creme"] .sub{ color:rgba(60,60,64,.7); }
+  body[data-bg="creme"] .desc{ color:rgba(55,55,60,.8); }
 
   /* section bays: a faint dark wash + dark hairline on the light panel */
   body[data-bg="creme"] .group{
@@ -1023,7 +1035,7 @@
 <!-- STAGE BACKGROUND toggle — top-right. Flips the art canvas background between
      black and a soft creme white. Affects the STAGE only, never the rail. -->
 <div class="cornerctl">
-  <button class="curtoggle" id="btn-reactive" type="button" aria-pressed="true" aria-label="Toggle cursor reactivity — when on, the art follows/reacts to the cursor" title="Cursor reactive">
+  <button class="curtoggle" id="btn-reactive" type="button" aria-pressed="false" aria-label="Toggle cursor reactivity — when on, the art follows/reacts to the cursor" title="Cursor reactive">
     <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 2.5L5 18.5L9.3 14.4L12 20.4L14.1 19.5L11.4 13.6L17 13.6Z"/></svg>
   </button>
   <div class="bgtoggle" id="bg-toggle" role="group" aria-label="Sidebar theme (dark / light)">
@@ -1035,6 +1047,7 @@
 <header class="topbar">
   <h1 class="wordmark">ASCII<span class="blip" aria-hidden="true"></span></h1>
   <span class="sub">everything is characters</span>
+  <p class="desc">Generative ASCII art, photos &amp; text. Copy as text, export, or share.</p>
 
   <div class="controls" role="group" aria-label="Instrument controls">
     <!-- MODE SWITCH — top-level 3-way segmented toggle that swaps the whole control
@@ -1342,7 +1355,7 @@
     word:    'ASCII', // words mode: the text to render as ASCII
     wordFill:'solid', // words mode: 'solid' | '3d' | 'matrix' | 'plasma' | 'donut'
     wordPal: 'mono',  // words 3d: colour palette 'mono'|'ryb'|'rainbow'|'neon'
-    reactive:true     // does the cursor make the art react (donut tilt, ripples, etc.)?
+    reactive:false    // cursor reactivity DEFAULTS OFF — the art ignores the cursor until toggled on
   };
 
   // WORDS 3D palettes — ordered colour BANDS distributed across the word by
