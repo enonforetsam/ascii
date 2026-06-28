@@ -1645,9 +1645,24 @@
   // spin rates.
   function makeSolid(cfg) {
     var simT = 0;
-    var zbuf = null;
-    function reset() { zbuf = new Float32Array(gridN); }
+    var zbuf = null;   // nearest 1/z per cell (front-surface depth key)
+    var acc  = null;   // accumulated luminance for the front surface, per cell
+    var cnt  = null;   // sample coverage count for the front surface, per cell
+    function alloc() {
+      zbuf = new Float32Array(gridN);
+      acc  = new Float32Array(gridN);
+      cnt  = new Float32Array(gridN);
+    }
+    function reset() { alloc(); }
     function setTime(t) { simT = t; }
+
+    // depth tolerance: samples whose 1/z is within ZEPS of the cell's nearest
+    // are treated as the SAME (front) surface and AVERAGED; clearly-nearer
+    // samples replace (a new surface wins the cell); behind ones are dropped.
+    // This is the supersample/coverage path that kills the speckle: many surface
+    // samples land in one cell and we average their shading instead of keeping a
+    // single noisy one.
+    var ZEPS = cfg.zeps || 0.012;
 
     function render(dt, tiltX, tiltY) {
       simT += dt;
@@ -1658,8 +1673,8 @@
       var C = simT * cfg.rC + sphase * 0.27;                           // about Z
 
       lum.fill(0); glyph.fill(0);
-      if (!zbuf || zbuf.length !== gridN) zbuf = new Float32Array(gridN);
-      zbuf.fill(0);
+      if (!zbuf || zbuf.length !== gridN) alloc();
+      zbuf.fill(0); acc.fill(0); cnt.fill(0);
 
       var cosA = Math.cos(A), sinA = Math.sin(A);
       var cosB = Math.cos(B), sinB = Math.sin(B);
@@ -1672,9 +1687,15 @@
       // light direction (normalized), points up/back toward the eye
       var lx = cfg.lx, ly = cfg.ly, lz = cfg.lz;
       var amb = cfg.ambient;
+      var contrast = cfg.contrast || 1;
 
       // emit a single object-space surface point with its object-space normal.
-      function emit(ox, oy, oz, nx, ny, nz) {
+      // `edge` (optional, 0..1) is an edge/seam darkening weight: 1 = full ink,
+      // lower = darker — lets faceted shapes paint crisp outlines.
+      // `litVal` (optional, 0..1) HARD-OVERRIDES the shaded luminance and skips
+      // back-face culling — used only by the cube to stamp bright structural
+      // edge lines on top of the flat-shaded faces (classic wireframe-on-solid).
+      function emit(ox, oy, oz, nx, ny, nz, edge, litVal) {
         // rotate point: X by A, Y by B, Z by C
         // --- about X ---
         var y1 = oy * cosA - oz * sinA;
@@ -1707,17 +1728,43 @@
         var ny3 = nx2 * sinC + ny2 * cosC;
         var nz3 = nz2;
 
-        var L = nx3 * lx + ny3 * ly + nz3 * lz;
-        if (L < 0) L = 0;
-        if (nz3 <= 0) return;                 // back-facing: cull
-        var val = amb + (1 - amb) * L;        // ambient so silhouette never vanishes
+        var val;
+        if (litVal !== undefined) {
+          // structural edge line: fixed bright value, no N.L, no back-face cull.
+          // A tiny depth bias pulls it slightly toward the eye so it wins its cell.
+          val = litVal;
+          ooz += ZEPS * 1.5;
+        } else {
+          if (nz3 <= 0) return;               // back-facing: cull
+          var L = nx3 * lx + ny3 * ly + nz3 * lz;
+          if (L < 0) L = 0;
+          L *= contrast; if (L > 1) L = 1;
+          val = amb + (1 - amb) * L;          // ambient so silhouette never vanishes
+          if (edge !== undefined) val *= edge; // crisp edge/seam darkening
+        }
         if (val > 1) val = 1;
 
         var idx = yp * cols + xp;
-        if (ooz > zbuf[idx]) { zbuf[idx] = ooz; lum[idx] = val; }
+        var zc = zbuf[idx];
+        if (ooz > zc + ZEPS) {
+          // a clearly nearer surface claims this cell: start its average fresh
+          zbuf[idx] = ooz; acc[idx] = val; cnt[idx] = 1;
+        } else if (ooz > zc - ZEPS) {
+          // same front surface: accumulate so the cell is the AVERAGE of every
+          // sample that covers it (anti-aliased, speckle-free)
+          if (ooz > zc) zbuf[idx] = ooz;
+          acc[idx] += val; cnt[idx] += 1;
+        }
+        // else: behind the front surface — ignore
       }
 
       cfg.sample(emit, simT);
+
+      // resolve accumulation -> averaged luminance per covered cell
+      for (var i = 0; i < gridN; i++) {
+        var c = cnt[i];
+        if (c > 0) lum[i] = acc[i] / c;
+      }
     }
     return { reset: reset, render: render, setTime: setTime };
   }
@@ -1725,23 +1772,43 @@
   /* ====================================================================
      ENGINE — CUBE  (solid cube: 6 faces sampled as grids of surface points,
      each face carrying its own normal; rotated on 3 axes; z-buffer + N.L so
-     each visible face reads at a distinct brightness).
+     each visible face reads at a distinct brightness, plus 12 explicit bright
+     EDGE LINES stamped on top so it reads as an unmistakable 3D box).
      ==================================================================== */
+  // constant geometry tables — built ONCE (no per-frame allocation): the 8
+  // corners (half-size 1) and the 12 edges as corner-index pairs.
+  var CUBE_V = [
+    [-1,-1,-1],[ 1,-1,-1],[ 1, 1,-1],[-1, 1,-1],
+    [-1,-1, 1],[ 1,-1, 1],[ 1, 1, 1],[-1, 1, 1]
+  ];
+  var CUBE_E = [
+    [0,1],[1,2],[2,3],[3,0],   // back face ring (z = -1)
+    [4,5],[5,6],[6,7],[7,4],   // front face ring (z = +1)
+    [0,4],[1,5],[2,6],[3,7]    // connecting struts
+  ];
   var Cube = makeSolid({
     modelScale: 1.9, K2: 5.0, rA: 0.55, rB: 0.80, rC: 0.22,
-    lx: 0.32, ly: 0.55, lz: 0.77, ambient: 0.16,
+    // HIGH ambient floor: even the dimmest visible face stays well above the
+    // blank-char threshold across its WHOLE area, so its straight silhouette
+    // edge reads (no fade-to-black rounding). Modest contrast keeps the three
+    // faces at clearly-distinct tones (front brightest) without any vanishing.
+    lx: 0.42, ly: 0.46, lz: 0.78, ambient: 0.62, contrast: 0.82, zeps: 0.02,
     sample: function (emit) {
       var H = 1.0;                 // half-size
-      var N = 26;                  // points per face edge
+      var N = 120;                 // points per face edge (dense: no speckle gaps)
       var inv = 1 / (N - 1);
-      // 6 faces: axis sign + the two in-plane spanning axes
-      // each entry: normal (nx,ny,nz) and a fn to map (u,v) in [-H,H] to point
+      // 6 faces: axis sign + the two in-plane spanning axes. Faces fill SOLID
+      // right to the silhouette (no per-border darkening — that fade is exactly
+      // what rounded the cube into a tombstone). The box structure instead comes
+      // from explicit bright EDGE LINES stamped on top (below).
       for (var f = 0; f < 6; f++) {
         var nx = 0, ny = 0, nz = 0;
         for (var i = 0; i < N; i++) {
-          var a = (i * inv * 2 - 1) * H;
+          var fu = i * inv;            // 0..1 across face
+          var a = (fu * 2 - 1) * H;
           for (var j = 0; j < N; j++) {
-            var b = (j * inv * 2 - 1) * H;
+            var fv = j * inv;
+            var b = (fv * 2 - 1) * H;
             var x, y, z;
             if (f === 0) { x = H;  y = a;  z = b;  nx = 1; ny = 0; nz = 0; }
             else if (f === 1) { x = -H; y = a;  z = b;  nx = -1; ny = 0; nz = 0; }
@@ -1751,6 +1818,24 @@
             else { x = a;  y = b;  z = -H; nx = 0; ny = 0; nz = -1; }
             emit(x, y, z, nx, ny, nz);
           }
+        }
+      }
+      // EXPLICIT EDGE LINES — the 12 cube edges stamped as bright structural
+      // lines (litVal bypasses N.L + back-face cull + depth-biases toward the
+      // eye) so the box reads UNAMBIGUOUSLY: sharp corners + straight silhouette
+      // at every rotation angle. Hidden (back) edges are occluded by the faces'
+      // z-buffer so only the visible box wireframe shows. Tables are the shared
+      // CUBE_V / CUBE_E built once above (no per-frame allocation).
+      var EN = 150;                // samples per edge (dense, gap-free line)
+      var einv = 1 / (EN - 1);
+      for (var e = 0; e < 12; e++) {
+        var p0 = CUBE_V[CUBE_E[e][0]], p1 = CUBE_V[CUBE_E[e][1]];
+        var dx = (p1[0] - p0[0]) * H, dy = (p1[1] - p0[1]) * H, dz = (p1[2] - p0[2]) * H;
+        var bx = p0[0] * H, by = p0[1] * H, bz = p0[2] * H;
+        for (var s = 0; s < EN; s++) {
+          var t = s * einv;
+          // normal unused on the lit path; pass 0s. litVal = 1 (full bright).
+          emit(bx + dx * t, by + dy * t, bz + dz * t, 0, 0, 0, undefined, 1);
         }
       }
     }
@@ -1763,13 +1848,17 @@
      ==================================================================== */
   var Sphere = makeSolid({
     modelScale: 1.05, K2: 4.4, rA: 0.18, rB: 0.62, rC: 0.0,
-    lx: 0.40, ly: 0.50, lz: 0.77, ambient: 0.14,
+    lx: 0.40, ly: 0.50, lz: 0.77, ambient: 0.13, contrast: 1.12, zeps: 0.02,
     sample: function (emit) {
       var R = 1.0;
-      var NTHETA = 90, NPHI = 64;
+      // dense parametric grid so every covered cell fills + averages smoothly
+      var NTHETA = 220, NPHI = 300;
       var dT = Math.PI / NTHETA;            // 0..pi (pole to pole)
       var dP = (2 * Math.PI) / NPHI;        // 0..2pi (around)
-      var BANDS = 9, MERID = 14;            // surface pattern frequency
+      // SUBTLE surface cue: soft latitude + longitude banding, fixed to the
+      // surface so it turns WITH the ball (the spin reads) — gentle ripple, not
+      // a chaotic checker. Amplitude is small so the N.L terminator dominates.
+      var BANDS = 10, MERID = 18, AMP = 0.10;
       for (var i = 0; i <= NTHETA; i++) {
         var th = i * dT;
         var st = Math.sin(th), ct = Math.cos(th);
@@ -1778,29 +1867,14 @@
           var sp = Math.sin(ph), cp = Math.cos(ph);
           // unit-sphere point == its own normal
           var x = R * st * cp, y = R * ct, z = R * st * sp;
-          // checker pattern fixed to the surface (rotates with the ball)
-          var band = Math.floor(i / (NTHETA / BANDS));
-          var mer = Math.floor(k / (NPHI / MERID));
-          var checker = ((band + mer) & 1) ? 1.0 : 0.55;
-          emit2(emit, x, y, z, x, y, z, checker);
+          // smooth banding texture (cos waves) -> 1-AMP..1, surface-locked
+          var tex = 1 - AMP * (0.5 - 0.5 * Math.cos(th * BANDS)) * (0.5 - 0.5 * Math.cos(ph * MERID));
+          // bake the soft texture into the edge weight (multiplies final lum)
+          emit(x, y, z, x, y, z, tex);
         }
       }
     }
   });
-  // sphere needs a texture multiplier on lum; wrap emit to fold it in by
-  // scaling the normal length is wrong (N.L would change), so instead we
-  // pre-multiply via a small shim that re-emits with a darkened ambient.
-  function emit2(emit, x, y, z, nx, ny, nz, tex) {
-    // emit then darken: cheapest correct path is to scale the normal toward
-    // the light is wrong; instead emit and let tex modulate by emitting a
-    // proportionally shorter normal is also wrong. We modulate lum directly
-    // below in a sphere-specific pass — but to keep makeSolid generic we
-    // approximate the texture by tinting the normal magnitude, which the
-    // ambient+N.L formula reads as brightness. Use plain emit with the tex
-    // baked into the normal scale (N.L scales linearly, silhouette held by
-    // ambient inside makeSolid).
-    emit(x, y, z, nx * tex, ny * tex, nz * tex);
-  }
 
   /* ====================================================================
      ENGINE — TORUSKNOT  (a (p,q) torus knot: a tube of radius `tube` swept
@@ -1809,11 +1883,11 @@
      ==================================================================== */
   var TorusKnot = makeSolid({
     modelScale: 3.0, K2: 6.0, rA: 0.40, rB: 0.66, rC: 0.30,
-    lx: 0.36, ly: 0.52, lz: 0.77, ambient: 0.15,
+    lx: 0.36, ly: 0.52, lz: 0.77, ambient: 0.16, contrast: 1.15, zeps: 0.014,
     sample: function (emit) {
       var p = 2, q = 3;
-      var tube = 0.42;
-      var NSEG = 360, NRING = 16;
+      var tube = 0.46;
+      var NSEG = 1100, NRING = 40;
       var dt = (2 * Math.PI) / NSEG;
       var dr = (2 * Math.PI) / NRING;
       var eps = 0.01;
@@ -1859,8 +1933,8 @@
      distinct brightness; rotated so it is unmistakably a pyramid).
      ==================================================================== */
   var Pyramid = makeSolid({
-    modelScale: 1.8, K2: 5.0, rA: 0.0, rB: 0.78, rC: 0.0, tiltA: -0.45,
-    lx: 0.34, ly: 0.40, lz: 0.85, ambient: 0.15,
+    modelScale: 1.85, K2: 5.0, rA: 0.0, rB: 0.78, rC: 0.0, tiltA: -0.5,
+    lx: 0.30, ly: 0.52, lz: 0.80, ambient: 0.30, contrast: 1.05, zeps: 0.02,
     sample: function (emit) {
       var hb = 1.0;                 // half base
       var ay = 1.25;                // apex height (above centre)
@@ -1870,8 +1944,10 @@
       var c = [
         [-hb, by, -hb], [hb, by, -hb], [hb, by, hb], [-hb, by, hb]
       ];
-      var N = 60;
-      // helper: fill a triangle (p0 apex, p1,p2 base edge) with a flat normal
+      var N = 150;                  // dense barycentric fill (no sparse regions)
+      var EDGEW = 0.05, EDGEMIN = 0.34;
+      // helper: fill a triangle (p0 apex, p1,p2 base edge) with a flat normal.
+      // Triangle-border darkening frames each face so silhouette + base read.
       function face(p0, p1, p2) {
         // face normal = normalize(cross(p1-p0, p2-p0)), outward
         var ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
@@ -1885,12 +1961,15 @@
           var fi = i / (N - 1);
           for (var j = 0; j <= i; j++) {
             var fj = i ? j / i : 0;
-            // barycentric across the triangle
+            // barycentric weights across the triangle
             var w0 = 1 - fi, w1 = fi * (1 - fj), w2 = fi * fj;
             var x = p0[0] * w0 + p1[0] * w1 + p2[0] * w2;
             var y = p0[1] * w0 + p1[1] * w1 + p2[1] * w2;
             var z = p0[2] * w0 + p1[2] * w1 + p2[2] * w2;
-            emit(x, y, z, nx, ny, nz);
+            // distance to nearest triangle edge (min barycentric coord) -> edge
+            var dB = Math.min(w0, w1, w2);
+            var edge = dB < EDGEW ? (EDGEMIN + (1 - EDGEMIN) * (dB / EDGEW)) : 1;
+            emit(x, y, z, nx, ny, nz, edge);
           }
         }
       }
