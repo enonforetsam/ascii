@@ -1280,6 +1280,7 @@
 
   var canvas = document.getElementById('art');
   var ctx = canvas.getContext('2d', { alpha: false });
+  var scanlinesEl = document.querySelector('.scanlines');   // CRT scanline DOM overlay (hidden while recording, baked instead)
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- configuration tables ---------- */
@@ -3895,8 +3896,82 @@
     downloadBlob(new Blob([gridToAnsi()], { type: 'text/plain' }), fname('ans'));
     toast('saved .ans');
   }
+  /* ====================================================================
+     CRT SCANLINES — bake the on-screen .scanlines DOM overlay INTO the
+     pixel exports (PNG / GIF / WebM·MP4) so an exported frame looks like
+     the live CRT: faint LIGHT horizontal lines on the dark stage. The live
+     display keeps using the .scanlines DOM overlay UNCHANGED; this only
+     paints the matching texture onto an export/downscale canvas (or the
+     main canvas while recording).
+
+     drawScanlines(ctx2, w, h, cssPxToTarget) composites the texture at the
+     target's OWN resolution (composite per export-frame, never bake-then-
+     downscale) so the line density stays at the correct ~4 CSS-px pitch
+     with NO moire.
+
+     Density/opacity match the CSS (.scanlines, the LIGHT-line override):
+       repeating-linear-gradient(to bottom,
+         rgba(255,255,255,0) 0 .. 2px,    (gap)
+         rgba(255,255,255,.16) 3px .. 4px) (light line)  · opacity:var(--scan-op)
+     i.e. a ~4 CSS-px period with a faint white line, the whole layer scaled
+     by the live --scan-op. We read --scan-op off the actual .scanlines
+     element so the baked faintness tracks whatever the live overlay shows.
+     cssPxToTarget = target-pixels per CSS-pixel (canvas.width / stageCSSwidth
+     for full-res, or the GIF downscale ratio), so the pitch maps 1:1 to what
+     the eye sees on screen. */
+  function scanOpacity() {
+    // the live faintness — read the computed --scan-op from .scanlines (falls
+    // back to .7, the phosphor default) so the bake matches the on-screen layer.
+    var v = 0.7;
+    try {
+      var cs = scanlinesEl && getComputedStyle(scanlinesEl);
+      if (cs) {
+        var raw = cs.getPropertyValue('--scan-op');
+        if (raw) { var p = parseFloat(raw); if (!isNaN(p)) v = p; }
+        // if the overlay is hidden (display:none), opacity reads 0 — but we want
+        // the texture, so only trust an explicit opacity when it's > 0.
+        var op = parseFloat(cs.opacity);
+        if (!isNaN(op) && op > 0 && op < 1) v = Math.min(v, op);
+      }
+    } catch (e) {}
+    return v;
+  }
+  // paint the faint CRT light-lines onto ctx2 at this surface's resolution.
+  function drawScanlines(ctx2, w, h, cssPxToTarget) {
+    if (!w || !h) return;
+    var op = scanOpacity();
+    if (op <= 0) return;
+    var period = 4 * cssPxToTarget;            // the CSS 4px line pitch, in target px
+    if (period < 1.5) return;                  // sub-pixel pitch -> skip (would alias)
+    var lineH = Math.max(1, Math.round(period * 0.25)); // ~1 CSS px line of every 4
+    var lineAlpha = 0.16 * op;                  // match the CSS .16 * --scan-op
+    ctx2.save();
+    ctx2.globalCompositeOperation = 'source-over';
+    ctx2.globalAlpha = 1;
+    ctx2.fillStyle = 'rgba(255,255,255,' + lineAlpha.toFixed(4) + ')';
+    // draw the light line at the BOTTOM of each period (CSS band 3px..4px)
+    for (var y = period - lineH; y < h; y += period) {
+      ctx2.fillRect(0, Math.round(y), w, lineH);
+    }
+    ctx2.restore();
+  }
+  // CSS-px width of the stage (the canvas's on-screen box); the export ratio is
+  // canvas.width / this, i.e. the device-pixels per CSS-px the eye sees.
+  function stageCssToTarget() {
+    var cssW = canvas.clientWidth || (canvas.width / (dpr || 1));
+    return cssW ? (canvas.width / cssW) : (dpr || 1);
+  }
+
   function exportPng() {
-    canvas.toBlob(function (blob) {
+    // composite the canvas + the scanline texture onto an export canvas at the
+    // SAME resolution, then encode — so the PNG carries the CRT lines without
+    // leaving any baked artifact on the live canvas.
+    var ex = document.createElement('canvas');
+    ex.width = canvas.width; ex.height = canvas.height;
+    var ectx = ex.getContext('2d');
+    ectx.drawImage(canvas, 0, 0);
+    drawScanlines(ectx, ex.width, ex.height, stageCssToTarget());
+    ex.toBlob(function (blob) {
       if (!blob) { toast('png failed'); return; }
       downloadBlob(blob, fname('png'));
       toast('saved .png');
@@ -4163,9 +4238,13 @@
     var frames = [];
     var grabbed = 0;
     var interval = 1000 / FPS;
+    // CSS-px -> downscale-px ratio: bake the scanlines at the 720px target res so
+    // the line density is correct on the GIF (composite per-frame, no moire).
+    var gifCssToTarget = stageCssToTarget() * scale;
 
     function grab() {
       dctx.drawImage(canvas, 0, 0, srcW, srcH, 0, 0, gw, gh);
+      drawScanlines(dctx, gw, gh, gifCssToTarget);   // bake CRT lines onto THIS frame
       var img = dctx.getImageData(0, 0, gw, gh);
       frames.push({ data: img.data });        // small downscaled snapshot only
       grabbed++;
@@ -4287,6 +4366,12 @@
       };
       mediaRec.start();
       recording = true;
+      // Bake the CRT scanlines into the recorded canvas, and HIDE the .scanlines
+      // DOM overlay so the live screen doesn't show DOUBLE lines while recording.
+      if (scanlinesEl) scanlinesEl.style.display = 'none';
+      // bake once immediately so a PAUSED / reduced-motion stage (no rAF loop) is
+      // still captured WITH lines; the rAF loop re-bakes every frame when playing.
+      drawScanlines(ctx, canvas.width, canvas.height, stageCssToTarget());
       setRecUI(true);
       toast('recording…');
       // safety auto-stop ~15s, with a live countdown on the button
@@ -4299,6 +4384,7 @@
     } catch (e) {
       toast('recording failed');
       recording = false;
+      if (scanlinesEl) scanlinesEl.style.display = '';   // restore overlay if start failed mid-way
       setRecUI(false);
     }
   }
@@ -4309,6 +4395,11 @@
       try { mediaRec.stop(); } catch (e) {}
     }
     recording = false;
+    // restore the live DOM scanline overlay (the canvas bake stops now)…
+    if (scanlinesEl) scanlinesEl.style.display = '';
+    // …and repaint the canvas WITHOUT the baked lines so a paused/static stage
+    // doesn't keep the lines burned in (the rAF loop would clear them anyway).
+    if (!state.playing) { try { renderStaticFrame(); } catch (e) {} }
     setRecUI(false);
   }
   function toggleRec() {
@@ -4350,6 +4441,19 @@
     else                                Plasma.render(dt * sp);
     applyGradient();
     paint();
+    bakeScanlinesIfRecording();
+  }
+
+  // While a recording is in progress, the MAIN canvas is what captureStream()
+  // grabs — so bake the CRT scanlines straight onto it (at canvas resolution, no
+  // downscale -> no moire) AFTER the frame is painted. The .scanlines DOM overlay
+  // is hidden during recording (see startRec/stopRec) so the screen never doubles
+  // the lines; the live NON-recording path leaves the canvas clean and keeps the
+  // DOM overlay. paint() repaints from scratch each frame, so the baked lines
+  // never accumulate.
+  function bakeScanlinesIfRecording() {
+    if (!recording) return;
+    drawScanlines(ctx, canvas.width, canvas.height, stageCssToTarget());
   }
 
   /* ---------- GRADIENT colour mapping ----------
@@ -4435,6 +4539,7 @@
     }
     applyGradient();
     paint();
+    bakeScanlinesIfRecording();
   }
 
   function start() {
