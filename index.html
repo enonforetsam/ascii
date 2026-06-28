@@ -1213,6 +1213,7 @@
           <div class="knoblabel"><span class="knm">Contrast</span><span class="val" id="val-contrast">100</span></div>
         </div>
       </div>
+      <button class="tab" id="btn-play" type="button" aria-pressed="true" aria-label="Pause the animation" title="Pause / play the animation">pause</button>
     </div>
 
     <div class="group" id="grp-looks">
@@ -1365,7 +1366,8 @@
     word:    'ASCII', // words mode: the text to render as ASCII
     wordFill:'solid', // words mode: 'solid' | '3d' | 'matrix' | 'plasma' | 'donut'
     wordPal: 'mono',  // words 3d: colour palette 'mono'|'ryb'|'rainbow'|'neon'
-    reactive:false    // cursor reactivity DEFAULTS OFF — the art ignores the cursor until toggled on
+    reactive:false,   // cursor reactivity DEFAULTS OFF — the art ignores the cursor until toggled on
+    playing:true      // animation runs by default for EVERYONE (incl. reduced-motion users); pause via the toggle
   };
 
   // WORDS 3D palettes — ordered colour BANDS distributed across the word by
@@ -4149,8 +4151,8 @@
   function start() {
     if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
     last = 0;
-    if (reduce) {
-      renderStaticFrame();
+    if (!state.playing) {
+      renderStaticFrame();          // paused -> one static frame, no rAF loop
     } else {
       rafId = window.requestAnimationFrame(loop);
     }
@@ -4315,6 +4317,16 @@
     if (!state.reactive) pointer.active = false;   // drop any current cursor effect now
     start();
     toast('cursor ' + (state.reactive ? 'reactive' : 'off'));
+  });
+  var btnPlay = document.getElementById('btn-play');
+  if (btnPlay) btnPlay.addEventListener('click', function () {
+    state.playing = !state.playing;
+    btnPlay.setAttribute('aria-pressed', state.playing ? 'true' : 'false');
+    btnPlay.textContent = state.playing ? 'pause' : 'play';
+    btnPlay.setAttribute('aria-label', state.playing ? 'Pause the animation' : 'Play the animation');
+    if (state.playing) { start(); }                                  // resume the rAF loop
+    else if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; } // freeze the CURRENT frame
+    toast(state.playing ? 'motion playing' : 'motion paused');
   });
   var segLooks   = document.getElementById('seg-looks');
   var btnCopy    = document.getElementById('act-copy');
@@ -4673,7 +4685,7 @@
     if (e === 'image') Image_.invalidate();
     syncControls();
     writeHash();
-    if (reduce) start(); // re-render the single static frame
+    if (!state.playing) start(); // re-render the single static frame
   }
 
   /* ---------- MODE SWITCH wiring ----------
@@ -4786,7 +4798,7 @@
     atlasDirty = true;
     writeHash();
     syncLook();
-    if (reduce) start();
+    if (!state.playing) start();
   });
   segColour.addEventListener('click', function (e) {
     var btn = e.target.closest('button');
@@ -4796,7 +4808,7 @@
     applyColour();
     writeHash();
     syncLook();
-    if (reduce) start();
+    if (!state.playing) start();
   });
 
   // STAGE BACKGROUND toggle — clicking a swatch flips the canvas bg (black/creme).
@@ -4827,7 +4839,7 @@
     valSpeed.textContent = slSpeed.value;
     writeHash();
     syncLook();
-    if (reduce) start();
+    if (!state.playing) start();
   });
 
   slCell.addEventListener('input', function () {
@@ -4837,7 +4849,7 @@
     resize();
     writeHash();
     syncLook();
-    if (reduce) start();
+    if (!state.playing) start();
   });
 
   slContrast.addEventListener('input', function () {
@@ -4846,7 +4858,7 @@
     valContrast.textContent = slContrast.value;
     Image_.invalidate();   // contrast feeds the image sample
     writeHash();
-    if (reduce) start();
+    if (!state.playing) start();
   });
 
   function hideBar() {
@@ -5042,12 +5054,12 @@
   // pointer reactivity
   function onPointer(ev) {
     // cursor-reactivity toggle is OFF -> the art ignores the cursor
-    if (!state.reactive) { if (pointer.active) { pointer.active = false; if (reduce) start(); } return; }
+    if (!state.reactive) { if (pointer.active) { pointer.active = false; if (!state.playing) start(); } return; }
     // stage-relative: subtract the rail offset so cell 0,0 is the stage corner
     var px = ev.clientX - rectL, py = ev.clientY - rectT;
     // only react when the pointer is over the STAGE (the art), not the rail/off-screen
     if (px < 0 || py < 0 || px >= vw || py >= vh) {
-      if (pointer.active) { pointer.active = false; if (reduce) start(); }
+      if (pointer.active) { pointer.active = false; if (!state.playing) start(); }
       return;
     }
     pointer.active = true;
@@ -5055,7 +5067,7 @@
     pointer.y = py;
     pointer.gx = (px / cw) | 0;
     pointer.gy = (py / ch) | 0;
-    if (reduce) start();
+    if (!state.playing) start();
   }
   window.addEventListener('pointermove', onPointer, { passive: true });
   window.addEventListener('pointerdown', onPointer, { passive: true });
@@ -5162,7 +5174,7 @@
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
       resize();
-      if (reduce) start();
+      if (!state.playing) start();
     }, 140);
   });
 
