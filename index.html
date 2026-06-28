@@ -616,9 +616,10 @@
   footer span{white-space:nowrap}
   body.barhidden footer{ display:none; }
 
-  /* The stage is ALWAYS dark now (the bg toggle themes the SIDEBAR only), so the CRT
-     scanlines are ALWAYS the faint LIGHT lines — the dark multiply lines would vanish
-     on black. So this carries the LIGHT gradient directly (no dark base to override). */
+  /* The STAGE bg now follows the active COLOUR/LOOK, so the CRT scanlines must
+     ADAPT: faint LIGHT lines on a DARK stage (the default), and faint DARK lines
+     (mix-blend multiply) on a LIGHT/paper stage — otherwise white lines vanish on
+     cream. body[data-stage] (stamped in applyBg) flips the polarity. */
   .scanlines{
     position:fixed;
     left:var(--panel-w);
@@ -635,6 +636,17 @@
       rgba(255,255,255,.16) 4px
     );
     opacity:var(--scan-op);
+  }
+  /* LIGHT/paper stage: dark lines, multiplied in so they read on cream. */
+  body[data-stage="light"] .scanlines{
+    mix-blend-mode:multiply;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,.16) 3px,
+      rgba(0,0,0,.16) 4px
+    );
   }
 
   /* STAGE BACKGROUND toggle — a compact pill pinned to the TOP-RIGHT of the stage
@@ -3583,9 +3595,11 @@
     var tileH = Math.max(1, Math.ceil(ch * dpr));
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // STAGE background is the top-right toggle's choice (overrides the theme bg);
-    // the ink/glyphs still come from the active colour theme.
-    ctx.fillStyle = BG.black.hex;   // stage is always dark; the bg toggle themes the SIDEBAR only
+    // STAGE background is driven by the ACTIVE COLOUR/LOOK (not the top-right
+    // toggle): paper-based looks (Blueprint/Mono/Noir) clear to the colour's
+    // LIGHT bg (#e4e6e0) and render dark ink; every dark colour clears to its
+    // own dark bg. The top-right bg toggle themes the SIDEBAR only.
+    ctx.fillStyle = col.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     if (atlasDirty) buildAtlas();
@@ -3951,7 +3965,11 @@
     } catch (e) {}
     return v;
   }
-  // paint the faint CRT light-lines onto ctx2 at this surface's resolution.
+  // paint the faint CRT scan-lines onto ctx2 at this surface's resolution.
+  // Polarity ADAPTS to the stage (matches the live .scanlines overlay): LIGHT
+  // lines on a dark stage, DARK lines on a light/paper stage — so an export on a
+  // paper look (Blueprint/Mono/Noir) bakes readable dark lines, not invisible
+  // white ones.
   function drawScanlines(ctx2, w, h, cssPxToTarget) {
     if (!w || !h) return;
     var op = scanOpacity();
@@ -3960,11 +3978,13 @@
     if (period < 1.5) return;                  // sub-pixel pitch -> skip (would alias)
     var lineH = Math.max(1, Math.round(period * 0.25)); // ~1 CSS px line of every 4
     var lineAlpha = 0.16 * op;                  // match the CSS .16 * --scan-op
+    var lightStage = document.body.dataset.stage === 'light';
+    var rgb = lightStage ? '0,0,0' : '255,255,255';  // dark lines on paper, light on void
     ctx2.save();
     ctx2.globalCompositeOperation = 'source-over';
     ctx2.globalAlpha = 1;
-    ctx2.fillStyle = 'rgba(255,255,255,' + lineAlpha.toFixed(4) + ')';
-    // draw the light line at the BOTTOM of each period (CSS band 3px..4px)
+    ctx2.fillStyle = 'rgba(' + rgb + ',' + lineAlpha.toFixed(4) + ')';
+    // draw the line at the BOTTOM of each period (CSS band 3px..4px)
     for (var y = period - lineH; y < h; y += period) {
       ctx2.fillRect(0, Math.round(y), w, lineH);
     }
@@ -4691,19 +4711,31 @@
     atlasDirty = true;
   }
 
-  /* ---------- STAGE background (top-right toggle) application ----------
-     Pushes the chosen bg into: the CSS var --stage-bg-rgb (drives the .vignette
-     edge fade), the theme-color meta, and the active swatch's aria-pressed ring.
-     The canvas clear reads BG[state.bg].hex directly in paint(). Called from
-     applyColour() (keeps it consistent on theme/colour changes), on boot, and on
-     every toggle click. */
+  /* ---------- STAGE background application ----------
+     The STAGE bg is driven by the ACTIVE COLOUR/LOOK, NOT the top-right toggle.
+     Pushes the active colour's bg into: the CSS var --stage-bg-rgb (drives the
+     .vignette edge fade — needs an "r,g,b" string, so we convert the hex), the
+     theme-color meta, and a body[data-stage] flag (light|dark) so the scanlines
+     can adapt (dark lines on a light/paper stage, light lines on a dark stage).
+     The top-right toggle (state.bg) ONLY themes the sidebar (body[data-bg]) and
+     MUST NOT touch the stage. Called from applyColour() (keeps it consistent on
+     theme/colour changes), on boot, and on every toggle click. */
+  function hexToRgbStr(hex) {
+    var h = String(hex).replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    return ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255);
+  }
   function applyBg() {
     // The toggle is a SIDEBAR light/dark theme — it must NOT change the stage/art.
-    // The PANEL keys off body[data-bg] (creme => light sidebar); the STAGE stays dark.
+    // The PANEL keys off body[data-bg] (creme => light sidebar).
     document.body.dataset.bg = state.bg;   // drives the sidebar theme ONLY
-    document.body.style.setProperty('--stage-bg-rgb', BG.black.rgb);   // stage edge-fade stays dark
+    // The STAGE bg follows the active COLOUR/LOOK (paper => light, else dark).
+    var col = COLOURS[state.colour] || COLOURS.phosphor;
+    document.body.dataset.stage = col.paper ? 'light' : 'dark';  // drives scanline polarity
+    document.body.style.setProperty('--stage-bg-rgb', hexToRgbStr(col.bg));  // vignette edge-fade matches the stage
     var meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', BG.black.hex);
+    if (meta) meta.setAttribute('content', col.bg);
     if (bgBlackBtn) bgBlackBtn.setAttribute('aria-pressed', state.bg === 'black' ? 'true' : 'false');
     if (bgCremeBtn) bgCremeBtn.setAttribute('aria-pressed', state.bg === 'creme' ? 'true' : 'false');
   }
