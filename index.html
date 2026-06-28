@@ -4159,10 +4159,26 @@
   }
 
   // assemble a GIF89a Blob from downscaled RGBA frames + a delay (in 1/100s).
+  //
+  // SIZE OPTIMISATION — frame differencing + transparency. The ASCII art is a
+  // mostly-static black background (+ baked scanlines) with a small moving
+  // region of glyphs, so the vast majority of pixels are identical frame-to-
+  // frame. We quantize to <=255 real colours and RESERVE one extra palette
+  // slot as a TRANSPARENT index. Frame 0 is emitted full + opaque. For every
+  // later frame we compare each pixel's palette index against the PREVIOUS
+  // frame's COMPOSITED index: identical -> transparent index (so the decoder
+  // keeps the prior pixel), changed -> its real index. "Changed" covers both a
+  // glyph's new position AND the cell it vacated, so there are no trails. We
+  // emit only the DIRTY BOUNDING BOX, with disposal method 1 ("do not dispose"
+  // / leave the canvas) so frames composite onto one another. The composited
+  // playback is pixel-identical to the old full-frame GIF, just far smaller.
   function encodeGif(frames, w, h, delayCs) {
-    var q = quantize(frames, 256);
+    // Reserve ONE slot for transparency: quantize real colours to <=255.
+    var q = quantize(frames, 255);
     var palette = q.palette;
-    var bits = paletteBits(palette.length);
+    var transIdx = palette.length;          // first free slot = transparent
+    // colour-table size must cover the transparent index too
+    var bits = paletteBits(transIdx + 1);
     var tableLen = 1 << bits;               // padded power-of-two size
     var minCodeSize = Math.max(2, bits);    // LZW min code size (>=2)
 
@@ -4173,7 +4189,8 @@
     out.byte(0x80 | ((bits - 1) << 4) | (bits - 1)); // global colour table, depth
     out.byte(0);    // background colour index
     out.byte(0);    // pixel aspect ratio
-    // global colour table (padded)
+    // global colour table (padded). The transparent slot's RGB is never shown,
+    // so any value is fine; leave it black like the other padding entries.
     for (var c = 0; c < tableLen; c++) {
       if (c < palette.length) { out.byte(palette[c][0]); out.byte(palette[c][1]); out.byte(palette[c][2]); }
       else { out.byte(0); out.byte(0); out.byte(0); }
@@ -4184,25 +4201,113 @@
     out.byte(0x03); out.byte(0x01); out.word(0); // loop count 0 = forever
     out.byte(0x00);
 
+    var n = w * h;
+    var prev = null;                         // previous frame's composited indices
+    var prevRGB = null;                      // previous frame's COMPOSITED source RGB (threshold diff)
+    // Squared-RGB tolerance for "changed". A pixel whose source colour moved
+    // less than this is HELD (transparent) instead of re-emitted. ~48 = a delta
+    // of ~4/channel — pure anti-alias/dither flicker, invisible on the gradient,
+    // but it folds that flicker into transparent runs LZW packs to nothing.
+    var THRESH = 48;
+
     for (var f = 0; f < frames.length; f++) {
-      // graphic control extension (per frame delay)
-      out.byte(0x21); out.byte(0xf9); out.byte(0x04);
-      out.byte(0x00);            // no transparency, no disposal
-      out.word(delayCs);         // delay in 1/100s
-      out.byte(0x00);            // transparent colour index
-      out.byte(0x00);            // block terminator
-      // image descriptor
-      out.byte(0x2c);
-      out.word(0); out.word(0); out.word(w); out.word(h);
-      out.byte(0x00);            // no local colour table, not interlaced
-      // index stream
-      var px = frames[f].data, n = w * h, indices = new Uint8Array(n);
+      // 1) map this frame's RGBA -> real palette indices (no transparency yet)
+      var px = frames[f].data, real = new Uint8Array(n);
+      var curRGB = THRESH ? new Uint8Array(n * 3) : null;
       for (var i = 0, p = 0; i < n; i++, p += 4) {
-        indices[i] = q.nearest(px[p], px[p + 1], px[p + 2]);
+        real[i] = q.nearest(px[p], px[p + 1], px[p + 2]);
+        if (curRGB) { var t3 = i * 3; curRGB[t3] = px[p]; curRGB[t3 + 1] = px[p + 1]; curRGB[t3 + 2] = px[p + 2]; }
       }
+      frames[f].data = null;                 // release RGBA right after mapping
+
+      var x0, y0, x1, y1;                     // dirty bbox (inclusive)
+      var out_idx;                            // index stream for this frame
+
+      if (f === 0 || prev === null) {
+        // Frame 0: full frame, fully opaque. Becomes the composite baseline.
+        x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1;
+        out_idx = real;
+      } else {
+        // Frame N: diff vs previous composite. Build a transparency-masked copy
+        // and find the dirty bounding box (changed pixels only).
+        x0 = w; y0 = h; x1 = -1; y1 = -1;
+        var masked = new Uint8Array(n);
+        for (var y = 0, k = 0; y < h; y++) {
+          for (var x = 0; x < w; x++, k++) {
+            // "unchanged" = same palette index, OR (with a tolerance) the source
+            // RGB moved less than THRESH. Sub-threshold churn (anti-alias dither
+            // flicker) is the dominant entropy source; folding it into transparency
+            // is the single biggest shrink with no visible quality loss. When a
+            // pixel is held, snap its composite value back to prev so it can't
+            // drift cumulatively across frames.
+            var same = (real[k] === prev[k]);
+            if (!same && THRESH) {
+              var t3 = k * 3;
+              var dr = curRGB[t3] - prevRGB[t3];
+              var dg = curRGB[t3 + 1] - prevRGB[t3 + 1];
+              var db = curRGB[t3 + 2] - prevRGB[t3 + 2];
+              if (dr * dr + dg * dg + db * db <= THRESH) { same = true; real[k] = prev[k]; }
+            }
+            if (same) {
+              masked[k] = transIdx;          // unchanged -> keep prior pixel
+            } else {
+              masked[k] = real[k];           // changed -> emit new colour
+              if (x < x0) x0 = x; if (x > x1) x1 = x;
+              if (y < y0) y0 = y; if (y > y1) y1 = y;
+            }
+          }
+        }
+        if (x1 < 0) {
+          // No pixels changed -> emit a minimal 1x1 transparent frame so the
+          // per-frame delay still elapses (keeps timing exact, costs ~20 bytes).
+          x0 = 0; y0 = 0; x1 = 0; y1 = 0;
+          out_idx = new Uint8Array([transIdx]);
+        } else {
+          // crop the masked stream (unchanged pixels = transparent) to the dirty
+          // bbox. Transparent runs over the static background LZW-pack to almost
+          // nothing, so this beats re-emitting the region opaque; both composite
+          // to an identical picture under disposal=1.
+          var bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+          out_idx = new Uint8Array(bw * bh);
+          for (var yy = 0, d = 0; yy < bh; yy++) {
+            var rowBase = (y0 + yy) * w + x0;
+            for (var xx = 0; xx < bw; xx++, d++) out_idx[d] = masked[rowBase + xx];
+          }
+        }
+      }
+
+      // graphic control extension: transparency on, disposal = 1 (do not
+      // dispose -> composite onto the prior frame), per-frame delay.
+      out.byte(0x21); out.byte(0xf9); out.byte(0x04);
+      out.byte(0x01 | (1 << 2)); // bit0 transparent-colour flag + disposal=1 (bits 2-4)
+      out.word(delayCs);         // delay in 1/100s
+      out.byte(transIdx);        // transparent colour index
+      out.byte(0x00);            // block terminator
+      // image descriptor at the dirty offset/size
+      var iw = x1 - x0 + 1, ih = y1 - y0 + 1;
+      out.byte(0x2c);
+      out.word(x0); out.word(y0); out.word(iw); out.word(ih);
+      out.byte(0x00);            // no local colour table, not interlaced
       out.byte(minCodeSize);
-      lzwEncode(minCodeSize, indices, out);
-      frames[f].data = null;     // release this frame's RGBA right after use
+      lzwEncode(minCodeSize, out_idx, out);
+
+      // this frame's (held-snapped) REAL indices become the next composite.
+      // For threshold diffing, the composited RGB of held pixels stays at prev's
+      // value (the decoder kept them), so carry prevRGB forward for held pixels
+      // and adopt curRGB for changed ones — this prevents sub-threshold drift
+      // from accumulating frame after frame.
+      if (THRESH) {
+        if (prevRGB && f > 0) {
+          for (var ci = 0; ci < n; ci++) {
+            if (masked[ci] === transIdx) {   // held -> keep prior RGB
+              var c3 = ci * 3;
+              curRGB[c3] = prevRGB[c3]; curRGB[c3 + 1] = prevRGB[c3 + 1]; curRGB[c3 + 2] = prevRGB[c3 + 2];
+            }
+          }
+        }
+        prevRGB = curRGB;
+      }
+      prev = real;               // this frame's REAL indices become the composite
     }
     out.byte(0x3b);              // trailer
     return new Blob([new Uint8Array(out.bytes)], { type: 'image/gif' });
