@@ -225,9 +225,17 @@
      :hover brightens + lifts subtly; the active aria-pressed="true" state is a clean
      filled green with dark text and a RESTRAINED glow (not a blooming halo). No
      clipped corners. ---- */
+  /* OUTLINED CLIPPED SHAPE — the slant clips the border off the diagonal, so instead
+     of a real border we paint the element BACKGROUND as the OUTLINE colour (clipped to
+     the slant) and lay a ::after FILL inset by 1px with the SAME clip-path. The outline
+     colour then shows as a uniform ~1px edge on EVERY side incl. the diagonal. The fill
+     sits at z-index:-1 inside an isolate'd stacking context so the button TEXT stays
+     crisp ABOVE it (never doubled/outlined). --tab-outline / --tab-fill drive both. */
   .tab, .btn{
     appearance:none;
     -webkit-appearance:none;
+    position:relative;
+    isolation:isolate;
     font-family:var(--mono);
     font-size:10px;
     letter-spacing:.01em;
@@ -241,36 +249,48 @@
     text-overflow:clip;
     cursor:pointer;
     text-shadow:none;
+    border:0;
     border-radius:0;
-    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);  /* sharp HUD corner */
-    border:1px solid rgba(255,255,255,.2);
-    background-color:#17171a;
-    background-image:none;
-    transition:transform .08s ease, box-shadow .12s ease, background-color .12s ease, color .12s ease, border-color .12s ease;
+    --tab-slant:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    --tab-outline:rgba(255,255,255,.42);  /* hairline outline colour (follows slant) */
+    --tab-fill:#17171a;                   /* face colour */
+    clip-path:var(--tab-slant);           /* sharp HUD corner */
+    background:var(--tab-outline);        /* this layer IS the outline */
+    transition:transform .08s ease, box-shadow .12s ease, color .12s ease;
+  }
+  /* the fill face — inset 1px, same slant, behind the text */
+  .tab::after, .btn::after{
+    content:"";
+    position:absolute;
+    inset:1px;
+    z-index:-1;
+    clip-path:var(--tab-slant);
+    background:var(--tab-fill);
+    transition:background-color .12s ease;
   }
   .tab:hover, .btn:hover{
     transform:translateY(-1px);
     color:#e0e0e0;
-    border-color:rgba(255,255,255,.42);
-    background-color:#0e1a16;
+    --tab-outline:rgba(255,255,255,.62);
+    --tab-fill:#0e1a16;
   }
   .tab:active, .btn:active{
     transform:translateY(0);
-    background-color:#17171a;
+    --tab-fill:#17171a;
   }
-  /* selected — a clean filled green panel with dark text + a restrained glow */
+  /* selected — a clean filled white panel with dark text + a restrained glow; the
+     outline reads as a faint grey hairline so the slant stays drawn on the white tile */
   .tab[aria-pressed="true"]{
     color:#0a0a0a;
     font-weight:700;
     text-shadow:none;
-    border-color:#ffffff;
-    background-color:#ffffff;
-    background-image:none;
+    --tab-outline:rgba(0,0,0,.55);
+    --tab-fill:#ffffff;
     box-shadow:0 0 10px rgba(255,255,255,.35);
   }
   .tab[aria-pressed="true"]:hover{
     transform:translateY(-1px);
-    background-color:#f2f2f2;
+    --tab-fill:#f2f2f2;
     box-shadow:0 0 12px rgba(255,255,255,.45);
   }
 
@@ -298,28 +318,43 @@
     grid-template-columns:repeat(3,minmax(0,1fr));
     gap:6px;
   }
+  /* OUTLINED CLIPPED SWATCH — same technique as the tiles: the element background is
+     the OUTLINE colour clipped to the slant, and an inset-1px .lookface (set up by
+     buildLookSwatches, carrying the per-look stage bg, same slant) sits inside it, so
+     the outline reads as a uniform ~1px hairline on every edge incl. the diagonal. The
+     glyph patch + name sit ABOVE the face. */
   .looktile{
     appearance:none;
     -webkit-appearance:none;
     position:relative;
+    isolation:isolate;
     aspect-ratio:1 / 1;
     container-type:inline-size;
     overflow:hidden;
     padding:0;
     cursor:pointer;
+    border:0;
     border-radius:0;
-    clip-path:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);  /* sharp HUD corner */
-    border:1px solid rgba(0,0,0,.5);
-    background:#06060a;            /* per-look stage bg set inline by JS */
+    --lk-slant:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    clip-path:var(--lk-slant);  /* sharp HUD corner */
+    background:rgba(255,255,255,.34);  /* this layer IS the outline (light hairline) */
     color:#ececef;                /* no-JS fallback: plain name text */
     font-family:var(--mono);
     font-size:10px;
     line-height:34px;             /* centres the no-JS fallback name vertically */
     text-align:center;
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,.10),
       0 2px 4px rgba(0,0,0,.42);
-    transition:transform .07s ease, box-shadow .1s ease, border-color .1s ease, outline-color .1s ease;
+    transition:transform .07s ease, box-shadow .1s ease, background-color .1s ease, outline-color .1s ease;
+  }
+  /* the inset face — carries the per-look stage bg (set inline by JS), 1px inset so the
+     element's outline colour frames the whole slant. No-JS fallback: a dark face. */
+  .lookface{
+    position:absolute;
+    inset:1px;
+    z-index:-1;
+    clip-path:var(--lk-slant);
+    background:#06060a;
   }
   .looktile:hover{
     transform:translateY(-1px);
@@ -367,11 +402,11 @@
     background:linear-gradient(180deg, rgba(232,232,226,0) 0%, rgba(232,232,226,.66) 54%, rgba(232,232,226,.9) 100%);
     text-shadow:0 1px 0 rgba(255,255,255,.6);
   }
-  /* selected — a clean neon-green ring with a restrained glow */
+  /* selected — a clean white ring with a restrained glow; the slant outline brightens */
   .looktile[aria-pressed="true"]{
     outline:2px solid var(--neon);
     outline-offset:1px;
-    border-color:rgba(255,255,255,.5);
+    background:rgba(255,255,255,.85);   /* brighter slant hairline when active */
     box-shadow:
       inset 0 0 0 2px rgba(255,255,255,.7),
       0 0 9px rgba(255,255,255,.35);
@@ -616,10 +651,10 @@
 
   /* record button — active recording state pulses a red dot (on the dark metal tile) */
   .tab.recording{
-    border-color:#e0341f;
     color:#ff8a7e;
-    background-image:linear-gradient(180deg, #2a1614 0%, #1c0f0e 55%, #120a09 100%);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(224,52,31,.5), 0 0 9px rgba(224,52,31,.4);
+    --tab-outline:#e0341f;
+    --tab-fill:#1c0f0e;
+    box-shadow:0 0 9px rgba(224,52,31,.4);
   }
   .tab.recording::before{
     content:"";
@@ -635,10 +670,10 @@
   @keyframes recpulse{50%{opacity:.25}}
   /* clip ready — green "Save to Photos" state (iOS share-sheet save on the next tap) */
   .tab.saveready{
-    border-color:#1f9d55;
     color:#e0e0e0;
-    background-image:linear-gradient(180deg, #143b29 0%, #0f2c1f 55%, #0a1f16 100%);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 0 1px rgba(31,157,85,.55), 0 0 9px rgba(31,157,85,.4);
+    --tab-outline:#1f9d55;
+    --tab-fill:#0f2c1f;
+    box-shadow:0 0 9px rgba(31,157,85,.4);
   }
   .tab[aria-disabled="true"], .tab:disabled{
     opacity:.4;
@@ -3963,8 +3998,14 @@
       var seed = 0; for (var s = 0; s < name.length; s++) seed += name.charCodeAt(s) * (s + 3);
       var field = looksField(ramp, 6, 8, seed);
 
-      btn.style.background = C.bg;                       // the look's stage bg
       if (C.paper) btn.classList.add('lk-light'); else btn.classList.remove('lk-light');
+
+      // inset-1px face carrying the look's stage bg, so the element's slant outline
+      // shows as a uniform hairline all the way around (incl. the diagonal corner)
+      var face = document.createElement('span');
+      face.className = 'lookface';
+      face.setAttribute('aria-hidden', 'true');
+      face.style.background = C.bg;
 
       var tex = document.createElement('span');
       tex.className = 'looktex';
@@ -3984,6 +4025,7 @@
       nm.textContent = name;
 
       btn.textContent = '';                              // drop the fallback text
+      btn.appendChild(face);
       btn.appendChild(tex);
       btn.appendChild(nm);
     }
