@@ -601,11 +601,17 @@
      (right of the rail, above scanlines/vignette). Two circular swatches (black /
      creme); the active one carries a clear ring. Translucent backdrop + hairline
      border so it floats over either background. */
-  .bgtoggle{
+  /* top-right floating controls: the cursor-reactivity toggle + the bg (light/dark) toggle */
+  .cornerctl{
     position:fixed;
     top:14px;
     right:14px;
     z-index:5;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .bgtoggle{
     display:flex;
     align-items:center;
     gap:8px;
@@ -648,6 +654,29 @@
     outline:none;
     box-shadow:0 0 0 3px rgba(90,160,255,.95);
   }
+  /* CURSOR-REACTIVITY toggle — a small pill matching the bg toggle, sitting to its
+     left. Lit (white + glow) when reactivity is ON, dim when OFF. */
+  .curtoggle{
+    -webkit-appearance:none; appearance:none;
+    display:flex; align-items:center; justify-content:center;
+    min-height:36px; padding:0 11px;
+    border-radius:999px;
+    background:rgba(128,128,128,.16);
+    border:1px solid rgba(160,160,160,.35);
+    backdrop-filter:blur(8px) saturate(1.1); -webkit-backdrop-filter:blur(8px) saturate(1.1);
+    box-shadow:0 2px 10px rgba(0,0,0,.25);
+    color:rgba(225,225,225,.5);
+    cursor:pointer;
+    transition:color .12s ease, border-color .12s ease, box-shadow .12s ease;
+  }
+  .curtoggle svg{ width:17px; height:17px; display:block; }
+  .curtoggle:hover{ color:#fff; }
+  .curtoggle[aria-pressed="true"]{
+    color:#fff;
+    border-color:rgba(255,255,255,.6);
+    box-shadow:0 0 0 1px rgba(255,255,255,.22), 0 2px 10px rgba(0,0,0,.25), 0 0 9px rgba(255,255,255,.18);
+  }
+  .curtoggle:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(90,160,255,.95); }
 
   /* record button — active recording state pulses a red dot (on the dark metal tile) */
   .tab.recording{
@@ -888,7 +917,7 @@
       border-top:1px solid var(--ink-faint);
       padding:12px 16px 18px;
     }
-    .bgtoggle{ top:10px; right:10px; }   /* stays over the art (top-right) */
+    .cornerctl{ top:10px; right:10px; }   /* stays over the art (top-right) */
     .controls{ gap:12px; }
     /* flex-wrap the metal tiles + knobs so they adapt to ANY width and never clip */
     .tabs, .tabs.cols2{ display:flex; flex-wrap:wrap; gap:6px; }
@@ -908,9 +937,14 @@
 
 <!-- STAGE BACKGROUND toggle — top-right. Flips the art canvas background between
      black and a soft creme white. Affects the STAGE only, never the rail. -->
-<div class="bgtoggle" id="bg-toggle" role="group" aria-label="Stage background">
-  <button class="bgsw" id="bg-black" type="button" data-bg="black" title="Black background" aria-label="Black background" aria-pressed="true"></button>
-  <button class="bgsw" id="bg-creme" type="button" data-bg="creme" title="Creme background" aria-label="Creme background" aria-pressed="false"></button>
+<div class="cornerctl">
+  <button class="curtoggle" id="btn-reactive" type="button" aria-pressed="true" aria-label="Toggle cursor reactivity — when on, the art follows/reacts to the cursor" title="Cursor reactive">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M5 2.5L5 18.5L9.3 14.4L12 20.4L14.1 19.5L11.4 13.6L17 13.6Z"/></svg>
+  </button>
+  <div class="bgtoggle" id="bg-toggle" role="group" aria-label="Stage background">
+    <button class="bgsw" id="bg-black" type="button" data-bg="black" title="Black background" aria-label="Black background" aria-pressed="true"></button>
+    <button class="bgsw" id="bg-creme" type="button" data-bg="creme" title="Creme background" aria-label="Creme background" aria-pressed="false"></button>
+  </div>
 </div>
 
 <header class="topbar">
@@ -1071,7 +1105,6 @@
           <div class="knoblabel"><span class="knm">Contrast</span><span class="val" id="val-contrast">100</span></div>
         </div>
       </div>
-      <button class="tab" id="btn-reactive" type="button" aria-pressed="true" aria-label="Toggle cursor reactivity — when on, the art follows/reacts to the cursor">cursor reactive</button>
     </div>
 
     <div class="group" id="grp-looks">
