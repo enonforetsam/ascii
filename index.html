@@ -541,6 +541,7 @@
     right:12px;bottom:12px;
     z-index:4;
     display:none;
+    width:auto;          /* override .btn width:100% -> a small floating button, not full-width */
   }
   /* hidden state: collapse the rail to 0 so the stage expands full-width */
   body.barhidden{ --panel-w:0px; }
@@ -574,6 +575,9 @@
   .railtoggle:hover{ background:#24242c; color:#fff; }
   .railtoggle:focus-visible{ outline:2px solid #fff; outline-offset:2px; }
   @media (max-width:680px){ .railtoggle{ display:none; } }   /* no left rail on mobile */
+  /* mobile has no rail-edge handle, so when the bar is hidden show the bottom-right
+     "controls" button (wired to showBar) — otherwise hiding the bar is a dead-end */
+  @media (max-width:680px){ body.barhidden .reveal{ display:inline-block; } }
 
   footer{
     position:fixed;
