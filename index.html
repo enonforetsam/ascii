@@ -179,6 +179,22 @@
     max-width:34ch;
   }
   @media (max-width:720px){ .sub, .desc{display:none} }
+  /* "made by" portfolio credit — sits under the description, above the controls */
+  .credit{
+    font-size:9.5px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    text-shadow:none;
+    margin-top:11px;
+  }
+  .credit a{
+    color:var(--ink-dim);
+    text-decoration:none;
+    border-bottom:1px solid var(--line);
+    transition:color .12s ease, border-color .12s ease;
+  }
+  .credit a:hover{ color:var(--neon); border-color:var(--neon); }
   /* narrow desktop windows shrink the rail (it clamps to its 224px min) → shrink the
      tile text a touch so 8-char labels (standard/phosphor/spectrum/Generative) never clip. */
   @media (min-width:681px) and (max-width:1120px){
@@ -574,15 +590,6 @@
     pointer-events:none;
   }
   footer span{white-space:nowrap}
-  /* portfolio credit link — over the always-dark stage, so neutral light + clickable */
-  footer .byline{
-    pointer-events:auto;
-    color:#cfcfcf;
-    text-decoration:none;
-    border-bottom:1px solid rgba(200,200,200,.4);
-    transition:color .12s ease, border-color .12s ease;
-  }
-  footer .byline:hover{ color:#ffffff; border-color:#ffffff; }
   body.barhidden footer{ display:none; }
 
   .scanlines{
@@ -733,6 +740,9 @@
   }
   body[data-bg="creme"] .sub{ color:rgba(60,60,64,.7); }
   body[data-bg="creme"] .desc{ color:rgba(55,55,60,.8); }
+  body[data-bg="creme"] .credit{ color:rgba(60,60,64,.6); }
+  body[data-bg="creme"] .credit a{ color:#1c1c20; border-color:rgba(20,20,24,.32); }
+  body[data-bg="creme"] .credit a:hover{ color:#000; border-color:#000; }
 
   /* section bays: a faint dark wash + dark hairline on the light panel */
   body[data-bg="creme"] .group{
@@ -1034,6 +1044,7 @@
   <h1 class="wordmark">ASCII<span class="blip" aria-hidden="true"></span></h1>
   <span class="sub">everything is characters</span>
   <p class="desc">Generative ASCII art, photos &amp; text. Copy as text, export, or share.</p>
+  <p class="credit">made by <a href="https://themasterofnone.xyz" target="_blank" rel="noopener noreferrer">themasterofnone</a></p>
 
   <div class="controls" role="group" aria-label="Instrument controls">
     <!-- MODE SWITCH — top-level 3-way segmented toggle that swaps the whole control
@@ -1240,7 +1251,7 @@
 
 <footer>
   <span>M2 · copy · share · export · looks</span>
-  <span>made by <a class="byline" href="https://themasterofnone.xyz" target="_blank" rel="noopener noreferrer">themasterofnone</a></span>
+  <span>ascii.krackeddevs.com</span>
 </footer>
 
 <div class="scanlines" aria-hidden="true"></div>
