@@ -1253,6 +1253,8 @@
         <button class="tab" id="exp-ans" type="button" aria-label="Download as ANSI colour text">ans</button>
         <button class="tab" id="exp-png" type="button" aria-label="Download as PNG image">png</button>
         <button class="tab" id="exp-rec" type="button" aria-pressed="false" aria-label="Record a WebM clip">rec</button>
+        <button class="tab" id="exp-gif" type="button" title="Download a looping animated GIF (records ~3s of the live ASCII)" aria-label="Download a looping animated GIF clip">GIF</button>
+        <button class="tab" id="exp-readme" type="button" title="Copy this frame as a Markdown code block — paste into a GitHub README" aria-label="Copy frame as a Markdown README banner">readme</button>
       </div>
     </div>
 
@@ -3901,6 +3903,293 @@
     }, 'image/png');
   }
 
+  /* ====================================================================
+     README BANNER COPY — the current frame wrapped in a Markdown fenced
+     code block so pasting into a GitHub README renders a monospace ASCII
+     banner. Reuses gridToText() (the same source as copy-as-text), just
+     fenced with triple-backtick lines.
+     ==================================================================== */
+  var FENCE = '```';   // three backtick chars
+  function gridToReadme() {
+    return FENCE + '\n' + gridToText() + '\n' + FENCE;
+  }
+  function copyReadme() {
+    copyText(gridToReadme(), 'copied README banner');
+  }
+
+  /* ====================================================================
+     ANIMATED GIF EXPORT — the hero. A fully self-contained GIF89a encoder
+     (no library / CDN / worker-from-URL). Records ~3s of the LIVE animation
+     by grabbing canvas frames at ~13fps, downscaling each to <=720px wide,
+     quantizing all frames to a single shared <=256-colour palette, LZW-
+     encoding each frame, and assembling a NETSCAPE2.0 infinite-loop GIF89a.
+     Frames are captured as small downscaled RGBA snapshots (never ~45 full
+     -res frames at once), then encoded; buffers are released afterwards.
+     ==================================================================== */
+
+  /* --- GIF89a byte writer --------------------------------------------- */
+  function GifBuffer() {
+    this.bytes = [];
+  }
+  GifBuffer.prototype.byte = function (b) { this.bytes.push(b & 0xff); };
+  GifBuffer.prototype.word = function (w) { this.bytes.push(w & 0xff); this.bytes.push((w >> 8) & 0xff); };
+  GifBuffer.prototype.str = function (s) { for (var i = 0; i < s.length; i++) this.bytes.push(s.charCodeAt(i) & 0xff); };
+
+  /* --- median-cut colour quantization (<=256) ------------------------- */
+  // Collect a histogram of unique colours from all captured frames, then
+  // median-cut down to <=maxColors. Returns {palette:[r,g,b,...], map:fn}.
+  function quantize(frames, maxColors) {
+    // gather unique colours with counts using a 24-bit key map
+    var counts = Object.create(null);
+    var f, i, px, n, key, r, g, b;
+    for (f = 0; f < frames.length; f++) {
+      px = frames[f].data; n = px.length;
+      for (i = 0; i < n; i += 4) {
+        key = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    var boxes;
+    var colours = [];
+    for (key in counts) {
+      var k = key | 0;
+      colours.push({ r: (k >> 16) & 255, g: (k >> 8) & 255, b: k & 255, c: counts[key] });
+    }
+    if (colours.length <= maxColors) {
+      boxes = colours.map(function (c) { return [c]; });
+    } else {
+      boxes = [colours];
+      function widest(box) {
+        var rmin = 255, rmax = 0, gmin = 255, gmax = 0, bmin = 255, bmax = 0, j, c;
+        for (j = 0; j < box.length; j++) {
+          c = box[j];
+          if (c.r < rmin) rmin = c.r; if (c.r > rmax) rmax = c.r;
+          if (c.g < gmin) gmin = c.g; if (c.g > gmax) gmax = c.g;
+          if (c.b < bmin) bmin = c.b; if (c.b > bmax) bmax = c.b;
+        }
+        var dr = rmax - rmin, dg = gmax - gmin, db = bmax - bmin;
+        var mx = Math.max(dr, dg, db);
+        return mx === dr ? 'r' : (mx === dg ? 'g' : 'b');
+      }
+      while (boxes.length < maxColors) {
+        // pick the box with the most pixels and >1 colour to split
+        var bi = -1, best = -1;
+        for (i = 0; i < boxes.length; i++) {
+          if (boxes[i].length < 2) continue;
+          var tot = 0;
+          for (var jj = 0; jj < boxes[i].length; jj++) tot += boxes[i][jj].c;
+          if (tot > best) { best = tot; bi = i; }
+        }
+        if (bi < 0) break;
+        var box = boxes[bi];
+        var ch = widest(box);
+        box.sort(function (a, c) { return a[ch] - c[ch]; });
+        var mid = box.length >> 1;
+        boxes.splice(bi, 1, box.slice(0, mid), box.slice(mid));
+      }
+    }
+    // average each box -> palette entry
+    var palette = [];
+    for (i = 0; i < boxes.length; i++) {
+      var box2 = boxes[i], sr = 0, sg = 0, sb = 0, sc = 0;
+      for (var m = 0; m < box2.length; m++) {
+        sr += box2[m].r * box2[m].c; sg += box2[m].g * box2[m].c;
+        sb += box2[m].b * box2[m].c; sc += box2[m].c;
+      }
+      sc = sc || 1;
+      palette.push([Math.round(sr / sc), Math.round(sg / sc), Math.round(sb / sc)]);
+    }
+    if (palette.length === 0) palette.push([0, 0, 0]);
+    // nearest-colour lookup with a small cache
+    var cache = Object.create(null);
+    function nearest(r2, g2, b2) {
+      var ck = (r2 << 16) | (g2 << 8) | b2;
+      var hit = cache[ck];
+      if (hit !== undefined) return hit;
+      var bestI = 0, bestD = Infinity;
+      for (var p = 0; p < palette.length; p++) {
+        var pr = palette[p][0] - r2, pg = palette[p][1] - g2, pb = palette[p][2] - b2;
+        var d = pr * pr + pg * pg + pb * pb;
+        if (d < bestD) { bestD = d; bestI = p; }
+      }
+      cache[ck] = bestI;
+      return bestI;
+    }
+    return { palette: palette, nearest: nearest };
+  }
+
+  // GIF colour tables must be a power of two (2..256). Pad with zeros.
+  function paletteBits(len) {
+    var bits = 1;
+    while ((1 << bits) < len) bits++;
+    if (bits < 1) bits = 1;
+    return Math.min(8, bits);
+  }
+
+  /* --- LZW (GIF variable-width) — encodes one frame's index stream ----- */
+  function lzwEncode(minCodeSize, indices, out) {
+    var clearCode = 1 << minCodeSize;
+    var eoiCode = clearCode + 1;
+    var codeSize = minCodeSize + 1;
+    var dict = Object.create(null);
+    var next = eoiCode + 1;
+    function reset() {
+      dict = Object.create(null);
+      for (var i = 0; i < clearCode; i++) dict[String.fromCharCode(i)] = i;
+      next = eoiCode + 1;
+      codeSize = minCodeSize + 1;
+    }
+    // bit accumulator -> sub-blocks of <=255 bytes
+    var cur = 0, curBits = 0, block = [];
+    function flushBlock() {
+      out.byte(block.length);
+      for (var i = 0; i < block.length; i++) out.byte(block[i]);
+      block = [];
+    }
+    function emit(code) {
+      cur |= code << curBits;
+      curBits += codeSize;
+      while (curBits >= 8) {
+        block.push(cur & 0xff);
+        cur >>= 8; curBits -= 8;
+        if (block.length === 255) flushBlock();
+      }
+    }
+    reset();
+    emit(clearCode);
+    var prefix = String.fromCharCode(indices[0]);
+    for (var i = 1; i < indices.length; i++) {
+      var c = String.fromCharCode(indices[i]);
+      var combined = prefix + c;
+      if (dict[combined] !== undefined) {
+        prefix = combined;
+      } else {
+        emit(dict[prefix]);
+        dict[combined] = next++;
+        if (next > (1 << codeSize) && codeSize < 12) {
+          codeSize++;
+        } else if (next > 4095) {
+          emit(clearCode);
+          reset();
+        }
+        prefix = c;
+      }
+    }
+    emit(dict[prefix]);
+    emit(eoiCode);
+    // flush remaining bits
+    if (curBits > 0) { block.push(cur & 0xff); cur = 0; curBits = 0; }
+    if (block.length) flushBlock();
+    out.byte(0); // block terminator
+  }
+
+  // assemble a GIF89a Blob from downscaled RGBA frames + a delay (in 1/100s).
+  function encodeGif(frames, w, h, delayCs) {
+    var q = quantize(frames, 256);
+    var palette = q.palette;
+    var bits = paletteBits(palette.length);
+    var tableLen = 1 << bits;               // padded power-of-two size
+    var minCodeSize = Math.max(2, bits);    // LZW min code size (>=2)
+
+    var out = new GifBuffer();
+    out.str('GIF89a');
+    // logical screen descriptor
+    out.word(w); out.word(h);
+    out.byte(0x80 | ((bits - 1) << 4) | (bits - 1)); // global colour table, depth
+    out.byte(0);    // background colour index
+    out.byte(0);    // pixel aspect ratio
+    // global colour table (padded)
+    for (var c = 0; c < tableLen; c++) {
+      if (c < palette.length) { out.byte(palette[c][0]); out.byte(palette[c][1]); out.byte(palette[c][2]); }
+      else { out.byte(0); out.byte(0); out.byte(0); }
+    }
+    // NETSCAPE2.0 application extension -> INFINITE LOOP
+    out.byte(0x21); out.byte(0xff); out.byte(0x0b);
+    out.str('NETSCAPE2.0');
+    out.byte(0x03); out.byte(0x01); out.word(0); // loop count 0 = forever
+    out.byte(0x00);
+
+    for (var f = 0; f < frames.length; f++) {
+      // graphic control extension (per frame delay)
+      out.byte(0x21); out.byte(0xf9); out.byte(0x04);
+      out.byte(0x00);            // no transparency, no disposal
+      out.word(delayCs);         // delay in 1/100s
+      out.byte(0x00);            // transparent colour index
+      out.byte(0x00);            // block terminator
+      // image descriptor
+      out.byte(0x2c);
+      out.word(0); out.word(0); out.word(w); out.word(h);
+      out.byte(0x00);            // no local colour table, not interlaced
+      // index stream
+      var px = frames[f].data, n = w * h, indices = new Uint8Array(n);
+      for (var i = 0, p = 0; i < n; i++, p += 4) {
+        indices[i] = q.nearest(px[p], px[p + 1], px[p + 2]);
+      }
+      out.byte(minCodeSize);
+      lzwEncode(minCodeSize, indices, out);
+      frames[f].data = null;     // release this frame's RGBA right after use
+    }
+    out.byte(0x3b);              // trailer
+    return new Blob([new Uint8Array(out.bytes)], { type: 'image/gif' });
+  }
+
+  /* --- capture the live animation + drive the encoder ----------------- */
+  var gifBusy = false;
+  function exportGif() {
+    if (gifBusy) { toast('GIF already encoding…'); return; }
+    if (!window.Blob || !window.URL) { toast('GIF unavailable'); return; }
+    gifBusy = true;
+    if (btnGif) { btnGif.disabled = true; btnGif.textContent = 'GIF…'; }
+    toast('recording GIF…');
+
+    var FPS = 13;
+    var DURATION = 2.8;
+    var TOTAL = Math.round(FPS * DURATION);   // ~36 frames
+    var DELAY_CS = Math.round(100 / FPS);     // per-frame delay in 1/100s
+
+    // downscale target: <=720px wide, keep aspect, even dims
+    var srcW = canvas.width, srcH = canvas.height;
+    var maxW = 720;
+    var scale = srcW > maxW ? maxW / srcW : 1;
+    var gw = Math.max(2, Math.round(srcW * scale) & ~1);
+    var gh = Math.max(2, Math.round(srcH * scale) & ~1);
+
+    // a single reusable downscale canvas — grab + shrink each live frame into it,
+    // pulling small RGBA snapshots (never the full-res frames) for the encoder.
+    var ds = document.createElement('canvas');
+    ds.width = gw; ds.height = gh;
+    var dctx = ds.getContext('2d', { willReadFrequently: true });
+
+    var frames = [];
+    var grabbed = 0;
+    var interval = 1000 / FPS;
+
+    function grab() {
+      dctx.drawImage(canvas, 0, 0, srcW, srcH, 0, 0, gw, gh);
+      var img = dctx.getImageData(0, 0, gw, gh);
+      frames.push({ data: img.data });        // small downscaled snapshot only
+      grabbed++;
+      if (grabbed >= TOTAL) { finish(); return; }
+      gifGrabTimer = window.setTimeout(grab, interval);
+    }
+    function finish() {
+      try {
+        var blob = encodeGif(frames, gw, gh, DELAY_CS);
+        frames = null;
+        downloadBlob(blob, fname('gif'));
+        toast('saved .gif · ' + grabbed + ' frames');
+      } catch (e) {
+        toast('GIF failed');
+      }
+      gifBusy = false;
+      if (btnGif) { btnGif.disabled = false; btnGif.textContent = 'GIF'; }
+    }
+    // ensure the render loop is running so we capture live motion; if it isn't
+    // (paused / reduced-motion), grab() still snapshots the current frame each tick.
+    gifGrabTimer = window.setTimeout(grab, interval);
+  }
+  var gifGrabTimer = 0;
+
   /* ---------- clip recording (MP4 on touch/share, WebM on desktop) ---------- */
   var REC_SUPPORTED = !!(typeof MediaRecorder !== 'undefined' &&
                          canvas.captureStream && window.Blob && window.URL);
@@ -4336,6 +4625,8 @@
   var btnAns     = document.getElementById('exp-ans');
   var btnPng     = document.getElementById('exp-png');
   var btnRec     = document.getElementById('exp-rec');
+  var btnGif     = document.getElementById('exp-gif');
+  var btnReadme  = document.getElementById('exp-readme');
   var imgFile    = document.getElementById('img-file');
   var btnInsert  = document.getElementById('img-insert');
   var btnReplace = document.getElementById('img-replace');
@@ -4904,6 +5195,8 @@
       btnRec.addEventListener('click', toggleRec);
     }
   }
+  if (btnGif)    btnGif.addEventListener('click', exportGif);
+  if (btnReadme) btnReadme.addEventListener('click', copyReadme);
 
   /* ---------- IMAGE insert / invert / drag-drop / paste ---------- */
 
