@@ -40,6 +40,10 @@
     --tab-bg-on:rgba(var(--ink-rgb),.24);
     /* width of the Fluid-style left rail; collapses to 0 when hidden/mobile */
     --panel-w:clamp(224px, 23vw, 300px);
+    /* shared HUD slant — the clipped sharp top-right corner used by tabs/looks/etc.
+       (.group keeps a slightly larger 10px variant). */
+    --hud-slant:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    --hud-slant-lg:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   }
   body[data-theme="amber"]{
     --bg:#0a0600;  --bg-rgb:10,6,0;
@@ -240,7 +244,7 @@
     background:rgba(255,255,255,.018);
     border:1px solid rgba(255,255,255,.12);
     border-radius:0;
-    clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);  /* sharp HUD corner */
+    clip-path:var(--hud-slant-lg);  /* sharp HUD corner */
   }
   /* ---- SECTION LABELS — clean uppercase tracked green, no markers, no brackets. */
   .group > .lab{
@@ -294,7 +298,7 @@
     text-shadow:none;
     border:0;
     border-radius:0;
-    --tab-slant:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    --tab-slant:var(--hud-slant);
     --tab-outline:rgba(255,255,255,.42);  /* hairline outline colour (follows slant) */
     --tab-fill:#17171a;                   /* face colour */
     clip-path:var(--tab-slant);           /* sharp HUD corner */
@@ -378,7 +382,7 @@
     cursor:pointer;
     border:0;
     border-radius:0;
-    --lk-slant:polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    --lk-slant:var(--hud-slant);
     clip-path:var(--lk-slant);  /* sharp HUD corner */
     background:rgba(255,255,255,.34);  /* this layer IS the outline (light hairline) */
     color:#ececef;                /* no-JS fallback: plain name text */
@@ -612,6 +616,9 @@
   footer span{white-space:nowrap}
   body.barhidden footer{ display:none; }
 
+  /* The stage is ALWAYS dark now (the bg toggle themes the SIDEBAR only), so the CRT
+     scanlines are ALWAYS the faint LIGHT lines — the dark multiply lines would vanish
+     on black. So this carries the LIGHT gradient directly (no dark base to override). */
   .scanlines{
     position:fixed;
     left:var(--panel-w);
@@ -622,26 +629,12 @@
     pointer-events:none;
     background:repeating-linear-gradient(
       to bottom,
-      rgba(0,0,0,0) 0,
-      rgba(0,0,0,0) 2px,
-      rgba(0,0,0,.16) 3px,
-      rgba(0,0,0,.16) 4px
-    );
-    mix-blend-mode:multiply;
-    opacity:var(--scan-op);
-  }
-  /* The stage is ALWAYS dark now (the bg toggle themes the SIDEBAR only), so the CRT
-     scanlines are ALWAYS the faint LIGHT lines — the dark multiply lines would vanish
-     on black. This overrides the dark base above in every mode. */
-  .scanlines{
-    background:repeating-linear-gradient(
-      to bottom,
       rgba(255,255,255,0) 0,
       rgba(255,255,255,0) 2px,
       rgba(255,255,255,.16) 3px,
       rgba(255,255,255,.16) 4px
     );
-    mix-blend-mode:normal;
+    opacity:var(--scan-op);
   }
 
   /* STAGE BACKGROUND toggle — a compact pill pinned to the TOP-RIGHT of the stage
@@ -1293,7 +1286,6 @@
   var canvas = document.getElementById('art');
   var ctx = canvas.getContext('2d', { alpha: false });
   var scanlinesEl = document.querySelector('.scanlines');   // CRT scanline DOM overlay (hidden while recording, baked instead)
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* ---------- configuration tables ---------- */
 
@@ -1399,6 +1391,9 @@
     rainbow: [[233,69,69],[247,148,41],[247,224,41],[74,201,96],[51,140,228],[150,84,214]],
     neon:    [[44,232,228], [232,44,210], [156,247,46]]            // cyan/magenta/lime
   };
+  // valid words-mode fills (the set the wf= hash key accepts) — validated via
+  // hasOwnProperty (matching wp/e) instead of an inline OR-chain.
+  var WORD_FILLS = { solid:1, '3d':1, matrix:1, plasma:1, donut:1 };
 
   // DEFAULTS — the canonical baseline. writeHash() trims any key equal to its
   // default so share links stay short and back-compatible with old #e=&c=&k=.
@@ -1412,9 +1407,10 @@
     seed:    0
   };
 
-  // the generative engines (the only ones reachable via the ENGINE tabs); the
-  // 'image' render is activated from the IMAGE section, not an engine tab.
-  var GEN_ENGINES = { donut:1, cube:1, sphere:1, torusknot:1, pyramid:1, matrix:1, plasma:1, life:1, fire:1, flow:1, starfield:1, tunnel:1 };
+  // the generative engines (reachable via the ENGINE tabs; 'image' is its own mode).
+  // Populated from the ENGINES registry once defined — nothing between reads it, so
+  // the forward-declared {} is safe.
+  var GEN_ENGINES = {};
   // remember the last generative engine, so removing an image returns to it
   // (donut by default). Seeded from the boot state if it's already generative.
   var lastGenEngine = 'donut';
@@ -1433,6 +1429,19 @@
   }
   var rng = mulberry32(0);            // active seeded generator (re-made on reseed)
   function reseed() { rng = mulberry32(state.seed | 0); }
+
+  /* ---------- tiny CSS helpers (dedup of inline colour-string building) ---------
+     rgbCss([r,g,b]) -> "rgb(r,g,b)"; stopsCss(C, angle) -> the linear-gradient from
+     a colour entry's .stops at the given angle. Used by the swatch/atlas builders. */
+  function rgbCss(a) { return 'rgb(' + a[0] + ',' + a[1] + ',' + a[2] + ')'; }
+  function stopsCss(C, angle) {
+    var parts = [];
+    for (var j = 0; j < C.stops.length; j++) parts.push(rgbCss(C.stops[j]));
+    return 'linear-gradient(' + angle + ',' + parts.join(',') + ')';
+  }
+  // a LOOK's resolved charset: its explicit .c, else donut's ramp for the donut
+  // engine, else 'standard'. (Written verbatim in applyPreset/buildLookSwatches/matchLook.)
+  function lookCharset(p) { return p.c || (p.e === 'donut' ? 'donut' : 'standard'); }
 
   // grid + reusable typed arrays (the character buffer — source of truth)
   var dpr = 1, cw = 12, ch = 12, cols = 0, rows = 0, gridN = 0;
@@ -1464,7 +1473,7 @@
 
   function buildAtlas() {
     var ink = COLOURS[state.colour].ink;
-    var inkCss = 'rgb(' + ink[0] + ',' + ink[1] + ',' + ink[2] + ')';
+    var inkCss = rgbCss(ink);
 
     // collect the glyph set we need: the ramp always, plus matrix glyphs when
     // the matrix engine is active (it forces code points).
@@ -1542,13 +1551,7 @@
     glyph = new Uint32Array(gridN);
     cellCol = new Int32Array(gridN);
 
-    // reset per-engine state that depends on grid dims
-    Matrix.reset();
-    Donut.reset();
-    Cube.reset();
-    Sphere.reset();
-    TorusKnot.reset();
-    Pyramid.reset();
+    resetAllEngines();     // re-prime grid-dependent engine state (registry-driven)
     Image_.invalidate();   // grid size changed -> re-sample the image
     Words.invalidate();    // grid size changed -> re-fit the text mask
 
@@ -3891,15 +3894,10 @@
   function doShuffle() {
     state.seed = (Math.random() * 0x7fffffff) | 0;
     reseed();
-    Matrix.reset();
-    Donut.reset();
-    Cube.reset();
-    Sphere.reset();
-    TorusKnot.reset();
-    Pyramid.reset();
-    Life.reset();
-    Fire.reset();
-    Starfield.reset();
+    // re-prime EVERY engine (registry-driven). The old hand-list skipped flow (+
+    // plasma/tunnel) so SHUFFLE never reseeded them — flow now re-primes off the new
+    // seed; plasma/tunnel read state.seed live each frame.
+    resetAllEngines();
     syncControls();
     writeHash();
     start(); // repaint (reduced-motion has no rAF loop)
@@ -4529,6 +4527,45 @@
     if (recording) stopRec(); else startRec();
   }
 
+  /* ---------- CENTRAL ENGINE REGISTRY — ONE source of truth for the 12 generative
+     engines (words + image stay OUTSIDE, own branches). Per entry: obj (module),
+     tilt (render takes tiltX,tiltY — the 3D solids), sp (advance by dt*speed vs plain
+     dt), settle (render one deterministic static frame). step(), renderStaticFrame()
+     and resetAllEngines() all read THIS so they can't drift. resetAllEngines() calls
+     obj.reset?.() — why SHUFFLE now reseeds plasma/flow/tunnel (old lists omitted them). */
+  var ENGINES = {
+    donut:     { obj: Donut,     tilt: true,  sp: true,  settle: function () { Donut.setTime(1.2); Donut.render(0, 0, 0); } },
+    cube:      { obj: Cube,      tilt: true,  sp: true,  settle: function () { Cube.setTime(1.2); Cube.render(0, 0, 0); } },
+    sphere:    { obj: Sphere,    tilt: true,  sp: true,  settle: function () { Sphere.setTime(1.2); Sphere.render(0, 0, 0); } },
+    torusknot: { obj: TorusKnot, tilt: true,  sp: true,  settle: function () { TorusKnot.setTime(1.2); TorusKnot.render(0, 0, 0); } },
+    pyramid:   { obj: Pyramid,   tilt: true,  sp: true,  settle: function () { Pyramid.setTime(1.2); Pyramid.render(0, 0, 0); } },
+    matrix:    { obj: Matrix,    tilt: false, sp: true,  settle: function () { Matrix.reset(); Matrix.render(0.4); } },
+    plasma:    { obj: Plasma,    tilt: false, sp: true,  settle: function () { Plasma.setTime(3.0); Plasma.render(0); } },
+    life:      { obj: Life,      tilt: false, sp: false, settle: function () { Life.settle(); } },
+    fire:      { obj: Fire,      tilt: false, sp: false, settle: function () { Fire.settle(); } },
+    flow:      { obj: Flow,      tilt: false, sp: true,  settle: function () { Flow.settle(); } },
+    starfield: { obj: Starfield, tilt: false, sp: false, settle: function () { Starfield.settle(); } },
+    tunnel:    { obj: Tunnel,    tilt: false, sp: false, settle: function () { Tunnel.settle(); } }
+  };
+
+  Object.keys(ENGINES).forEach(function (k) { GEN_ENGINES[k] = 1; });  // derive GEN_ENGINES from the registry
+
+  // re-prime every engine with a reset() — the single source for the resize/reseed
+  // reset AND doShuffle (the old two hand-lists disagreed + skipped plasma/flow/tunnel).
+  function resetAllEngines() {
+    for (var k in ENGINES) { var o = ENGINES[k].obj; if (o.reset) o.reset(); }
+  }
+
+  // dev assertion: the static HTML engine tabs must match the registry keys 1:1.
+  (function () {
+    try {
+      var tabKeys = Array.prototype.map.call(document.querySelectorAll('[data-engine]'), function (b) { return b.getAttribute('data-engine'); });
+      var reg = ENGINES;
+      var miss = tabKeys.filter(function (k) { return !reg[k]; }).concat(Object.keys(reg).filter(function (k) { return tabKeys.indexOf(k) < 0; }));
+      if (tabKeys.length && miss.length) console.warn('[ascii] engine tabs/registry drift:', miss);
+    } catch (e) {}
+  })();
+
   /* ---------- main loop ---------- */
 
   var rafId = 0, last = 0;
@@ -4548,19 +4585,14 @@
       else Words.renderFill(dt * sp, state.wordFill, tiltX, tiltY);
     }
     else if (state.mode === 'image')   Image_.render(dt);
-    else if (state.engine === 'donut') Donut.render(dt * sp, tiltX, tiltY);
-    else if (state.engine === 'cube') Cube.render(dt * sp, tiltX, tiltY);
-    else if (state.engine === 'sphere') Sphere.render(dt * sp, tiltX, tiltY);
-    else if (state.engine === 'torusknot') TorusKnot.render(dt * sp, tiltX, tiltY);
-    else if (state.engine === 'pyramid') Pyramid.render(dt * sp, tiltX, tiltY);
-    else if (state.engine === 'matrix') Matrix.render(dt * sp);
-    else if (state.engine === 'plasma') Plasma.render(dt * sp);
-    else if (state.engine === 'life')   Life.render(dt);
-    else if (state.engine === 'fire')   Fire.render(dt);
-    else if (state.engine === 'flow')   Flow.render(dt * sp);
-    else if (state.engine === 'starfield') Starfield.render(dt);
-    else if (state.engine === 'tunnel') Tunnel.render(dt);
-    else                                Plasma.render(dt * sp);
+    else {
+      // generative: one registry-driven dispatch (tilt engines take dt,x,y; sp engines
+      // advance by dt*speed). Unknown engine -> plasma (the old default tail).
+      var def = ENGINES[state.engine] || ENGINES.plasma;
+      var d = def.sp ? dt * sp : dt;
+      if (def.tilt) def.obj.render(d, tiltX, tiltY);
+      else          def.obj.render(d);
+    }
     applyGradient();
     paint();
     bakeScanlinesIfRecording();
@@ -4607,13 +4639,10 @@
     rafId = window.requestAnimationFrame(loop);
   }
 
-  // reduced-motion: render exactly ONE deterministic, content-rich static frame.
-  // Donut angles are pinned to an absolute sim time so the frame is identical on
-  // every re-render (no creeping rotation from repeated pointermove/resize).
-  // Matrix gets a real settle so columns are seeded INTO view (not a blank field)
-  // and plasma is advanced to a developed (non-faint) phase.
+  // reduced-motion: render exactly ONE deterministic, content-rich static frame
+  // (generative engines via the registry's per-engine settle()). Pointer/tilt is
+  // ignored so the frame is identical on every re-render.
   function renderStaticFrame() {
-    var tiltX = 0, tiltY = 0; // ignore pointer for a deterministic frame
     colActive = false;
     if (state.mode === 'words') {
       // reduced-motion words: solid is naturally static; an engine-fill renders
@@ -4631,33 +4660,10 @@
       }
     } else if (state.mode === 'image') {
       Image_.render(0);         // static sample (recomputes if dirty)
-    } else if (state.engine === 'donut') {
-      Donut.setTime(1.2);       // fixed absolute time -> stable A,B
-      Donut.render(0, tiltX, tiltY);
-    } else if (state.engine === 'cube') {
-      Cube.setTime(1.2); Cube.render(0, tiltX, tiltY);
-    } else if (state.engine === 'sphere') {
-      Sphere.setTime(1.2); Sphere.render(0, tiltX, tiltY);
-    } else if (state.engine === 'torusknot') {
-      TorusKnot.setTime(1.2); TorusKnot.render(0, tiltX, tiltY);
-    } else if (state.engine === 'pyramid') {
-      Pyramid.setTime(1.2); Pyramid.render(0, tiltX, tiltY);
-    } else if (state.engine === 'matrix') {
-      Matrix.reset();           // re-prime the full-height field
-      Matrix.render(0.4);       // larger settle step advances heads into view
-    } else if (state.engine === 'life') {
-      Life.settle();            // a developed Life texture in one shot
-    } else if (state.engine === 'fire') {
-      Fire.settle();            // a settled column of flame
-    } else if (state.engine === 'flow') {
-      Flow.settle();            // a developed flow field (fixed phase)
-    } else if (state.engine === 'starfield') {
-      Starfield.settle();       // a settled star spread with streaks
-    } else if (state.engine === 'tunnel') {
-      Tunnel.settle();          // a developed tunnel (fixed phase)
     } else {
-      Plasma.setTime(3.0);      // fixed developed phase (deterministic)
-      Plasma.render(0);
+      // generative: the registry's per-engine settle() renders ONE deterministic
+      // frame. Unknown engine -> plasma (matches the old default tail).
+      (ENGINES[state.engine] || ENGINES.plasma).settle();
     }
     applyGradient();
     paint();
@@ -4673,6 +4679,9 @@
       rafId = window.requestAnimationFrame(loop);
     }
   }
+  // repaint after a settings change: when paused there's no rAF loop, so re-render
+  // the single static frame (the unconditional start() callers — bg/hide/show — stay direct).
+  function rerender() { if (!state.playing) start(); }
 
   /* ---------- colour mode application (body class for CSS) ---------- */
 
@@ -4741,7 +4750,7 @@
       else if (k === 'ct') { var ct = clampInt(val, 40, 220); if (ct !== null) state.contrast = ct / 100; }
       else if (k === 'sd') { var sd = parseInt(val, 10); if (isFinite(sd)) state.seed = sd | 0; }
       else if (k === 'w') { try { state.word = decodeURIComponent(val || ''); } catch (e) { state.word = val || ''; } wordFromHash = true; }
-      else if (k === 'wf') { if (val === 'solid' || val === '3d' || val === 'matrix' || val === 'plasma' || val === 'donut') state.wordFill = val; }
+      else if (k === 'wf') { if (WORD_FILLS.hasOwnProperty(val)) state.wordFill = val; }
       else if (k === 'wp') { if (WORD_PALETTES.hasOwnProperty(val)) state.wordPal = val; }
     }
     // top-level MODE: an explicit word pins WORDS mode; else image render => image;
@@ -4823,26 +4832,56 @@
   var valSpeed   = document.getElementById('val-speed');
   var valCell    = document.getElementById('val-cell');
   var valContrast= document.getElementById('val-contrast');
+
+  /* SLIDERS registry — one descriptor per slider (input/label/unit + get/set/after),
+     read by BOTH bindSlider and syncSliderLabels so formatting + state write live once.
+     All three run syncLook() on input now (fixes contrast's old drift). */
+  var SLIDERS = [
+    { input: slSpeed,    val: valSpeed,    unit: ' percent', get: function () { return Math.round(state.speed * 100); },    set: function (n) { state.speed = n / 100; },    after: function () {} },
+    { input: slCell,     val: valCell,     unit: ' pixels',  get: function () { return state.cell; },                        set: function (n) { state.cell = n; },           after: function () { resize(); } },
+    { input: slContrast, val: valContrast, unit: ' percent', get: function () { return Math.round(state.contrast * 100); }, set: function (n) { state.contrast = n / 100; }, after: function () { Image_.invalidate(); } }
+  ];
+  function setSliderLabel(s) { var n = s.get(); s.input.setAttribute('aria-valuetext', n + s.unit); s.val.textContent = n; }
+  function bindSlider(s) {
+    s.input.addEventListener('input', function () {
+      s.set(+s.input.value); setSliderLabel(s); s.after(); writeHash(); syncLook(); rerender();
+    });
+  }
+
   var btnHide    = document.getElementById('btn-hide');
   var btnShow    = document.getElementById('btn-show');
   var railToggle = document.getElementById('rail-toggle');
+
+  // bindToggle — a boolean state[key] toggle: flip it, mirror aria-pressed, optionally
+  // swap label/aria-label, run opts.after(on), toast. (Shared by reactive + play; the
+  // bg toggle is a 2-swatch PICKER, not a boolean, so it keeps its own handler.)
+  function bindToggle(btn, key, opts) {
+    if (!btn) return;
+    opts = opts || {};
+    btn.addEventListener('click', function () {
+      var on = state[key] = !state[key];
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (opts.labels) btn.textContent = on ? opts.labels.on : opts.labels.off;
+      if (opts.ariaLabels) btn.setAttribute('aria-label', on ? opts.ariaLabels.on : opts.ariaLabels.off);
+      if (opts.after) opts.after(on);
+      if (opts.toast) toast(opts.toast(on));
+    });
+  }
+
   var btnReactive = document.getElementById('btn-reactive');
-  if (btnReactive) btnReactive.addEventListener('click', function () {
-    state.reactive = !state.reactive;
-    btnReactive.setAttribute('aria-pressed', state.reactive ? 'true' : 'false');
-    if (!state.reactive) pointer.active = false;   // drop any current cursor effect now
-    start();
-    toast('cursor ' + (state.reactive ? 'reactive' : 'off'));
+  bindToggle(btnReactive, 'reactive', {
+    after: function (on) { if (!on) pointer.active = false; start(); },  // drop the cursor effect, repaint
+    toast: function (on) { return 'cursor ' + (on ? 'reactive' : 'off'); }
   });
   var btnPlay = document.getElementById('btn-play');
-  if (btnPlay) btnPlay.addEventListener('click', function () {
-    state.playing = !state.playing;
-    btnPlay.setAttribute('aria-pressed', state.playing ? 'true' : 'false');
-    btnPlay.textContent = state.playing ? 'pause' : 'play';
-    btnPlay.setAttribute('aria-label', state.playing ? 'Pause the animation' : 'Play the animation');
-    if (state.playing) { start(); }                                  // resume the rAF loop
-    else if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; } // freeze the CURRENT frame
-    toast(state.playing ? 'motion playing' : 'motion paused');
+  bindToggle(btnPlay, 'playing', {
+    labels:     { on: 'pause', off: 'play' },
+    ariaLabels: { on: 'Pause the animation', off: 'Play the animation' },
+    after: function (on) {
+      if (on) { start(); }                                            // resume the rAF loop
+      else if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; } // freeze the CURRENT frame
+    },
+    toast: function (on) { return on ? 'motion playing' : 'motion paused'; }
   });
   var segLooks   = document.getElementById('seg-looks');
   var btnCopy    = document.getElementById('act-copy');
@@ -5005,8 +5044,7 @@
     state.mode     = 'generative';
     // KEEP the user's current engine — a LOOK only restyles (charset/colour/speed/cell/seed),
     // it does not switch engines (you pick the engine; the look dresses it).
-    if (p.c) state.charset = p.c;
-    else state.charset = (p.e === 'donut') ? 'donut' : 'standard';
+    state.charset  = lookCharset(p);
     state.colour   = p.k;
     state.speed    = p.sp / 100;
     state.cell     = p.ce;
@@ -5056,7 +5094,7 @@
       var look = LOOKS[name]; if (!look) continue;
       var C = COLOURS[look.k] || COLOURS.phosphor;
       // the look's own charset ramp (matches how applyPreset resolves charset)
-      var ramp = CHARSETS[look.c || (look.e === 'donut' ? 'donut' : 'standard')] || CHARSETS.standard;
+      var ramp = CHARSETS[lookCharset(look)] || CHARSETS.standard;
       var seed = 0; for (var s = 0; s < name.length; s++) seed += name.charCodeAt(s) * (s + 3);
       var field = looksField(ramp, 6, 8, seed);
 
@@ -5074,13 +5112,12 @@
       tex.setAttribute('aria-hidden', 'true');
       tex.textContent = field;
       if (C.grad && C.stops) {
-        var cols = C.stops.map(function (c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }).join(',');
-        tex.style.backgroundImage = 'linear-gradient(135deg,' + cols + ')';
+        tex.style.backgroundImage = stopsCss(C, '135deg');
         tex.style.webkitBackgroundClip = 'text';
         tex.style.backgroundClip = 'text';
         tex.style.color = 'transparent';
       } else {
-        tex.style.color = 'rgb(' + C.ink[0] + ',' + C.ink[1] + ',' + C.ink[2] + ')';
+        tex.style.color = rgbCss(C.ink);
       }
       var nm = document.createElement('span');
       nm.className = 'lookname';
@@ -5107,7 +5144,7 @@
     if (state.mode !== 'generative') return null;  // looks are generative-only
     for (var name in LOOKS) {
       var p = LOOKS[name];
-      var c = p.c || (p.e === 'donut' ? 'donut' : 'standard');
+      var c = lookCharset(p);
       if (state.charset === c && state.colour === p.k &&
           Math.round(state.speed * 100) === p.sp && state.cell === p.ce &&
           (state.seed | 0) === (p.sd | 0)) {
@@ -5119,16 +5156,13 @@
   function syncLook() { if (segLooks) setPressed(segLooks, 'data-look', matchLook()); }
 
   function syncSliderLabels() {
-    var sp = Math.round(state.speed * 100), co = Math.round(state.contrast * 100);
-    slSpeed.value    = sp;
-    slCell.value     = state.cell;
-    slContrast.value = co;
-    slSpeed.setAttribute('aria-valuetext', sp + ' percent');
-    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
-    slContrast.setAttribute('aria-valuetext', co + ' percent');
-    valSpeed.textContent    = sp;
-    valCell.textContent     = state.cell;
-    valContrast.textContent = co;
+    // registry-driven: push each slider's state value onto the range + label/aria
+    // (same formatter the input handlers use, so they can never drift).
+    for (var i = 0; i < SLIDERS.length; i++) {
+      var s = SLIDERS[i];
+      s.input.value = s.get();
+      setSliderLabel(s);
+    }
     refreshKnobs();
   }
 
@@ -5203,7 +5237,7 @@
     if (e === 'image') Image_.invalidate();
     syncControls();
     writeHash();
-    if (!state.playing) start(); // re-render the single static frame
+    rerender(); // re-render the single static frame
   }
 
   /* ---------- MODE SWITCH wiring ----------
@@ -5252,10 +5286,18 @@
     writeHash();
     start();
   }
-  if (segMode) segMode.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.mode) return;
-    var m = btn.dataset.mode;
+  // bindChips — the delegated chip-group click pattern: find the clicked button, read
+  // dataset[attr], hand (value, button) to onPick (which owns the state write + effects).
+  function bindChips(groupEl, attr, onPick) {
+    if (!groupEl) return;
+    groupEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('button');
+      if (!btn || btn.dataset[attr] == null) return;
+      onPick(btn.dataset[attr], btn);
+    });
+  }
+
+  bindChips(segMode, 'mode', function (m) {
     if (m === 'image') enterImageMode();
     else if (m === 'words') enterWordsMode();
     else enterGenerativeMode();
@@ -5276,10 +5318,8 @@
   }
 
   // WORDS fill picker — solid vs an engine that flows inside the letters.
-  if (segWordFill) segWordFill.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.fill) return;
-    state.wordFill = btn.dataset.fill;
+  bindChips(segWordFill, 'fill', function (v) {
+    state.wordFill = v;
     state.mode = 'words';
     atlasDirty = true;     // matrix-fill needs its glyph set baked
     if (state.wordFill === 'donut') Donut.reset();
@@ -5290,43 +5330,32 @@
   });
 
   // WORDS palette picker — the colour scheme for the 3D block letters.
-  if (segWordPal) segWordPal.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.pal) return;
-    state.wordPal = btn.dataset.pal;
+  bindChips(segWordPal, 'pal', function (v) {
+    state.wordPal = v;
     state.mode = 'words';
     setPressed(segWordPal, 'data-pal', state.wordPal);
     writeHash();
     start();
   });
 
-  // delegated click per chip group (one listener each). The ENGINE tabs only
-  // carry generative engines now; clicking one switches to generative but keeps
-  // any loaded image.
-  segEngine.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.engine) return;
-    setEngine(btn.dataset.engine);
-  });
-  segCharset.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.ramp) return;
-    state.charset = btn.dataset.ramp;
+  // the ENGINE tabs only carry generative engines now; clicking one switches to
+  // generative but keeps any loaded image.
+  bindChips(segEngine, 'engine', function (v) { setEngine(v); });
+  bindChips(segCharset, 'ramp', function (v) {
+    state.charset = v;
     setPressed(segCharset, 'data-ramp', state.charset);
     atlasDirty = true;
     writeHash();
     syncLook();
-    if (!state.playing) start();
+    rerender();
   });
-  segColour.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.colour) return;
-    state.colour = btn.dataset.colour;
+  bindChips(segColour, 'colour', function (v) {
+    state.colour = v;
     setPressed(segColour, 'data-colour', state.colour);
     applyColour();
     writeHash();
     syncLook();
-    if (!state.playing) start();
+    rerender();
   });
 
   // STAGE BACKGROUND toggle — clicking a swatch flips the canvas bg (black/creme).
@@ -5351,33 +5380,7 @@
     }
   })();
 
-  slSpeed.addEventListener('input', function () {
-    state.speed = (+slSpeed.value) / 100;
-    slSpeed.setAttribute('aria-valuetext', slSpeed.value + ' percent');
-    valSpeed.textContent = slSpeed.value;
-    writeHash();
-    syncLook();
-    if (!state.playing) start();
-  });
-
-  slCell.addEventListener('input', function () {
-    state.cell = +slCell.value;
-    slCell.setAttribute('aria-valuetext', state.cell + ' pixels');
-    valCell.textContent = state.cell;
-    resize();
-    writeHash();
-    syncLook();
-    if (!state.playing) start();
-  });
-
-  slContrast.addEventListener('input', function () {
-    state.contrast = (+slContrast.value) / 100;
-    slContrast.setAttribute('aria-valuetext', slContrast.value + ' percent');
-    valContrast.textContent = slContrast.value;
-    Image_.invalidate();   // contrast feeds the image sample
-    writeHash();
-    if (!state.playing) start();
-  });
+  for (var si = 0; si < SLIDERS.length; si++) bindSlider(SLIDERS[si]);
 
   function hideBar() {
     document.body.classList.add('barhidden');
@@ -5411,19 +5414,13 @@
       var sw = btns[i].querySelector('.cswatch');
       if (!sw) { sw = document.createElement('span'); sw.className = 'cswatch'; sw.setAttribute('aria-hidden', 'true'); btns[i].appendChild(sw); }
       if (C.grad && C.stops) {
-        var parts = [];
-        for (var j = 0; j < C.stops.length; j++) { var s = C.stops[j]; parts.push('rgb(' + s[0] + ',' + s[1] + ',' + s[2] + ')'); }
-        sw.style.background = 'linear-gradient(90deg,' + parts.join(',') + ')';
+        sw.style.background = stopsCss(C, '90deg');
       } else if (C.paper) { sw.style.background = '#e4e6e0'; }
-      else { sw.style.background = 'rgb(' + C.ink[0] + ',' + C.ink[1] + ',' + C.ink[2] + ')'; }
+      else { sw.style.background = rgbCss(C.ink); }
     }
   }
   buildColourSwatches();
-  if (segLooks) segLooks.addEventListener('click', function (e) {
-    var btn = e.target.closest('button');
-    if (!btn || !btn.dataset.look) return;
-    applyPreset(btn.dataset.look);
-  });
+  bindChips(segLooks, 'look', function (v) { applyPreset(v); });
   if (btnCopy)    btnCopy.addEventListener('click', doCopy);
   if (btnShare)   btnShare.addEventListener('click', doShare);
   if (btnShuffle) btnShuffle.addEventListener('click', doShuffle);
@@ -5591,12 +5588,12 @@
   // pointer reactivity
   function onPointer(ev) {
     // cursor-reactivity toggle is OFF -> the art ignores the cursor
-    if (!state.reactive) { if (pointer.active) { pointer.active = false; if (!state.playing) start(); } return; }
+    if (!state.reactive) { if (pointer.active) { pointer.active = false; rerender(); } return; }
     // stage-relative: subtract the rail offset so cell 0,0 is the stage corner
     var px = ev.clientX - rectL, py = ev.clientY - rectT;
     // only react when the pointer is over the STAGE (the art), not the rail/off-screen
     if (px < 0 || py < 0 || px >= vw || py >= vh) {
-      if (pointer.active) { pointer.active = false; if (!state.playing) start(); }
+      if (pointer.active) { pointer.active = false; rerender(); }
       return;
     }
     pointer.active = true;
@@ -5604,7 +5601,7 @@
     pointer.y = py;
     pointer.gx = (px / cw) | 0;
     pointer.gy = (py / ch) | 0;
-    if (!state.playing) start();
+    rerender();
   }
   window.addEventListener('pointermove', onPointer, { passive: true });
   window.addEventListener('pointerdown', onPointer, { passive: true });
@@ -5711,7 +5708,7 @@
     window.clearTimeout(resizeTimer);
     resizeTimer = window.setTimeout(function () {
       resize();
-      if (!state.playing) start();
+      rerender();
     }, 140);
   });
 
