@@ -980,6 +980,10 @@
       <span class="lab" id="lab-engine">Engine</span>
       <div class="tabs" role="group" aria-labelledby="lab-engine">
         <button class="tab" id="eng-donut" data-engine="donut" type="button" aria-pressed="true">donut</button>
+        <button class="tab" id="eng-cube" data-engine="cube" type="button" aria-pressed="false">cube</button>
+        <button class="tab" id="eng-sphere" data-engine="sphere" type="button" aria-pressed="false">sphere</button>
+        <button class="tab" id="eng-torusknot" data-engine="torusknot" type="button" aria-pressed="false">knot</button>
+        <button class="tab" id="eng-pyramid" data-engine="pyramid" type="button" aria-pressed="false">pyramid</button>
         <button class="tab" id="eng-matrix" data-engine="matrix" type="button" aria-pressed="false">matrix</button>
         <button class="tab" id="eng-plasma" data-engine="plasma" type="button" aria-pressed="false">plasma</button>
         <button class="tab" id="eng-life" data-engine="life" type="button" aria-pressed="false">life</button>
@@ -1245,7 +1249,7 @@
 
   // the generative engines (the only ones reachable via the ENGINE tabs); the
   // 'image' render is activated from the IMAGE section, not an engine tab.
-  var GEN_ENGINES = { donut:1, matrix:1, plasma:1, life:1, fire:1, flow:1, starfield:1, tunnel:1 };
+  var GEN_ENGINES = { donut:1, cube:1, sphere:1, torusknot:1, pyramid:1, matrix:1, plasma:1, life:1, fire:1, flow:1, starfield:1, tunnel:1 };
   // remember the last generative engine, so removing an image returns to it
   // (donut by default). Seeded from the boot state if it's already generative.
   var lastGenEngine = 'donut';
@@ -1376,6 +1380,10 @@
     // reset per-engine state that depends on grid dims
     Matrix.reset();
     Donut.reset();
+    Cube.reset();
+    Sphere.reset();
+    TorusKnot.reset();
+    Pyramid.reset();
     Image_.invalidate();   // grid size changed -> re-sample the image
     Words.invalidate();    // grid size changed -> re-fit the text mask
 
@@ -1474,6 +1482,284 @@
 
     return { reset: reset, render: render, setTime: setTime };
   })();
+
+  /* ====================================================================
+     SOLID 3D HELPERS — shared by the rotating-object engines below
+     (cube / sphere / torusknot / pyramid). They all reuse the donut's
+     z-buffer + N.L pipeline: sample surface points, rotate by angles that
+     are a PURE function of absolute time + bounded pointer tilt, project
+     with perspective + CHAR_ASPECT correction, keep a nearest-wins
+     z-buffer, write clamped N.L into lum[] (glyph stays 0 so the active
+     ramp derives the char). Each owns a persistent z-buffer typed array
+     and a setTime() for the deterministic reduced-motion frame.
+     ==================================================================== */
+  var SOLID_ASPECT = 0.5;       // monospace cells ~2x taller than wide
+
+  // make a fresh solid engine. `sampleFn(emit, t)` plots its surface points
+  // for absolute time t by calling emit(x,y,z, nx,ny,nz) in OBJECT space —
+  // the helper handles rotation, projection, z-buffer and N.L. `cfg` carries
+  // the projection scale (modelScale), camera distance (K2) and per-axis
+  // spin rates.
+  function makeSolid(cfg) {
+    var simT = 0;
+    var zbuf = null;
+    function reset() { zbuf = new Float32Array(gridN); }
+    function setTime(t) { simT = t; }
+
+    function render(dt, tiltX, tiltY) {
+      simT += dt;
+      var sphase = (state.seed | 0) * 0.123;
+      // three rotation angles; pointer AIMS (bounded offset), never accelerates
+      var A = simT * cfg.rA + (tiltY || 0) * 2.2 + sphase + (cfg.tiltA || 0); // about X
+      var B = simT * cfg.rB + (tiltX || 0) * 2.2 + sphase * 0.5;      // about Y
+      var C = simT * cfg.rC + sphase * 0.27;                           // about Z
+
+      lum.fill(0); glyph.fill(0);
+      if (!zbuf || zbuf.length !== gridN) zbuf = new Float32Array(gridN);
+      zbuf.fill(0);
+
+      var cosA = Math.cos(A), sinA = Math.sin(A);
+      var cosB = Math.cos(B), sinB = Math.sin(B);
+      var cosC = Math.cos(C), sinC = Math.sin(C);
+
+      var K2 = cfg.K2;
+      var K1 = Math.min(cols, rows / SOLID_ASPECT) * K2 * 0.30 / cfg.modelScale;
+      var halfC = cols / 2, halfR = rows / 2;
+
+      // light direction (normalized), points up/back toward the eye
+      var lx = cfg.lx, ly = cfg.ly, lz = cfg.lz;
+      var amb = cfg.ambient;
+
+      // emit a single object-space surface point with its object-space normal.
+      function emit(ox, oy, oz, nx, ny, nz) {
+        // rotate point: X by A, Y by B, Z by C
+        // --- about X ---
+        var y1 = oy * cosA - oz * sinA;
+        var z1 = oy * sinA + oz * cosA;
+        var x1 = ox;
+        // --- about Y ---
+        var x2 = x1 * cosB + z1 * sinB;
+        var z2 = -x1 * sinB + z1 * cosB;
+        var y2 = y1;
+        // --- about Z ---
+        var x3 = x2 * cosC - y2 * sinC;
+        var y3 = x2 * sinC + y2 * cosC;
+        var z3 = z2;
+
+        var z = K2 + z3;
+        if (z <= 0.05) return;
+        var ooz = 1 / z;
+        var xp = (halfC + K1 * ooz * x3) | 0;
+        var yp = (halfR - K1 * SOLID_ASPECT * ooz * y3) | 0;
+        if (xp < 0 || xp >= cols || yp < 0 || yp >= rows) return;
+
+        // rotate the normal the same way (rotation preserves length)
+        var ny1 = ny * cosA - nz * sinA;
+        var nz1 = ny * sinA + nz * cosA;
+        var nx1 = nx;
+        var nx2 = nx1 * cosB + nz1 * sinB;
+        var nz2 = -nx1 * sinB + nz1 * cosB;
+        var ny2 = ny1;
+        var nx3 = nx2 * cosC - ny2 * sinC;
+        var ny3 = nx2 * sinC + ny2 * cosC;
+        var nz3 = nz2;
+
+        var L = nx3 * lx + ny3 * ly + nz3 * lz;
+        if (L < 0) L = 0;
+        if (nz3 <= 0) return;                 // back-facing: cull
+        var val = amb + (1 - amb) * L;        // ambient so silhouette never vanishes
+        if (val > 1) val = 1;
+
+        var idx = yp * cols + xp;
+        if (ooz > zbuf[idx]) { zbuf[idx] = ooz; lum[idx] = val; }
+      }
+
+      cfg.sample(emit, simT);
+    }
+    return { reset: reset, render: render, setTime: setTime };
+  }
+
+  /* ====================================================================
+     ENGINE — CUBE  (solid cube: 6 faces sampled as grids of surface points,
+     each face carrying its own normal; rotated on 3 axes; z-buffer + N.L so
+     each visible face reads at a distinct brightness).
+     ==================================================================== */
+  var Cube = makeSolid({
+    modelScale: 1.9, K2: 5.0, rA: 0.55, rB: 0.80, rC: 0.22,
+    lx: 0.32, ly: 0.55, lz: 0.77, ambient: 0.16,
+    sample: function (emit) {
+      var H = 1.0;                 // half-size
+      var N = 26;                  // points per face edge
+      var inv = 1 / (N - 1);
+      // 6 faces: axis sign + the two in-plane spanning axes
+      // each entry: normal (nx,ny,nz) and a fn to map (u,v) in [-H,H] to point
+      for (var f = 0; f < 6; f++) {
+        var nx = 0, ny = 0, nz = 0;
+        for (var i = 0; i < N; i++) {
+          var a = (i * inv * 2 - 1) * H;
+          for (var j = 0; j < N; j++) {
+            var b = (j * inv * 2 - 1) * H;
+            var x, y, z;
+            if (f === 0) { x = H;  y = a;  z = b;  nx = 1; ny = 0; nz = 0; }
+            else if (f === 1) { x = -H; y = a;  z = b;  nx = -1; ny = 0; nz = 0; }
+            else if (f === 2) { x = a;  y = H;  z = b;  nx = 0; ny = 1; nz = 0; }
+            else if (f === 3) { x = a;  y = -H; z = b;  nx = 0; ny = -1; nz = 0; }
+            else if (f === 4) { x = a;  y = b;  z = H;  nx = 0; ny = 0; nz = 1; }
+            else { x = a;  y = b;  z = -H; nx = 0; ny = 0; nz = -1; }
+            emit(x, y, z, nx, ny, nz);
+          }
+        }
+      }
+    }
+  });
+
+  /* ====================================================================
+     ENGINE — SPHERE  (rotating textured ball: lat/long + checker surface
+     pattern that turns WITH the ball, modulating lum, plus N.L shading, so
+     the spin reads as a turning globe rather than a static lit disc).
+     ==================================================================== */
+  var Sphere = makeSolid({
+    modelScale: 1.05, K2: 4.4, rA: 0.18, rB: 0.62, rC: 0.0,
+    lx: 0.40, ly: 0.50, lz: 0.77, ambient: 0.14,
+    sample: function (emit) {
+      var R = 1.0;
+      var NTHETA = 90, NPHI = 64;
+      var dT = Math.PI / NTHETA;            // 0..pi (pole to pole)
+      var dP = (2 * Math.PI) / NPHI;        // 0..2pi (around)
+      var BANDS = 9, MERID = 14;            // surface pattern frequency
+      for (var i = 0; i <= NTHETA; i++) {
+        var th = i * dT;
+        var st = Math.sin(th), ct = Math.cos(th);
+        for (var k = 0; k < NPHI; k++) {
+          var ph = k * dP;
+          var sp = Math.sin(ph), cp = Math.cos(ph);
+          // unit-sphere point == its own normal
+          var x = R * st * cp, y = R * ct, z = R * st * sp;
+          // checker pattern fixed to the surface (rotates with the ball)
+          var band = Math.floor(i / (NTHETA / BANDS));
+          var mer = Math.floor(k / (NPHI / MERID));
+          var checker = ((band + mer) & 1) ? 1.0 : 0.55;
+          emit2(emit, x, y, z, x, y, z, checker);
+        }
+      }
+    }
+  });
+  // sphere needs a texture multiplier on lum; wrap emit to fold it in by
+  // scaling the normal length is wrong (N.L would change), so instead we
+  // pre-multiply via a small shim that re-emits with a darkened ambient.
+  function emit2(emit, x, y, z, nx, ny, nz, tex) {
+    // emit then darken: cheapest correct path is to scale the normal toward
+    // the light is wrong; instead emit and let tex modulate by emitting a
+    // proportionally shorter normal is also wrong. We modulate lum directly
+    // below in a sphere-specific pass — but to keep makeSolid generic we
+    // approximate the texture by tinting the normal magnitude, which the
+    // ambient+N.L formula reads as brightness. Use plain emit with the tex
+    // baked into the normal scale (N.L scales linearly, silhouette held by
+    // ambient inside makeSolid).
+    emit(x, y, z, nx * tex, ny * tex, nz * tex);
+  }
+
+  /* ====================================================================
+     ENGINE — TORUSKNOT  (a (p,q) torus knot: a tube of radius `tube` swept
+     along the knot curve; for each ring point the outward normal is the
+     offset from the curve centre, so N.L shades the tube smoothly).
+     ==================================================================== */
+  var TorusKnot = makeSolid({
+    modelScale: 3.0, K2: 6.0, rA: 0.40, rB: 0.66, rC: 0.30,
+    lx: 0.36, ly: 0.52, lz: 0.77, ambient: 0.15,
+    sample: function (emit) {
+      var p = 2, q = 3;
+      var tube = 0.42;
+      var NSEG = 360, NRING = 16;
+      var dt = (2 * Math.PI) / NSEG;
+      var dr = (2 * Math.PI) / NRING;
+      var eps = 0.01;
+      function curve(t, out) {
+        var r = 2 + Math.cos(q * t);
+        out[0] = r * Math.cos(p * t);
+        out[1] = r * Math.sin(p * t);
+        out[2] = -Math.sin(q * t);
+      }
+      var c0 = [0, 0, 0], c1 = [0, 0, 0];
+      for (var s = 0; s < NSEG; s++) {
+        var t = s * dt;
+        curve(t, c0); curve(t + eps, c1);
+        // tangent
+        var Tx = c1[0] - c0[0], Ty = c1[1] - c0[1], Tz = c1[2] - c0[2];
+        var Tl = Math.hypot(Tx, Ty, Tz) || 1; Tx /= Tl; Ty /= Tl; Tz /= Tl;
+        // a stable normal/binormal frame from the tangent
+        var ux = 0, uy = 0, uz = 1;
+        if (Math.abs(Tz) > 0.9) { ux = 1; uy = 0; uz = 0; }
+        // N = normalize(cross(T,u)), B = cross(T,N)
+        var Nx = Ty * uz - Tz * uy, Ny = Tz * ux - Tx * uz, Nz = Tx * uy - Ty * ux;
+        var Nl = Math.hypot(Nx, Ny, Nz) || 1; Nx /= Nl; Ny /= Nl; Nz /= Nl;
+        var Bx = Ty * Nz - Tz * Ny, By = Tz * Nx - Tx * Nz, Bz = Tx * Ny - Ty * Nx;
+        for (var r2 = 0; r2 < NRING; r2++) {
+          var a = r2 * dr;
+          var ca = Math.cos(a), sa = Math.sin(a);
+          // outward direction == the ring normal
+          var nx = Nx * ca + Bx * sa;
+          var ny = Ny * ca + By * sa;
+          var nz = Nz * ca + Bz * sa;
+          var px = c0[0] + tube * nx;
+          var py = c0[1] + tube * ny;
+          var pz = c0[2] + tube * nz;
+          emit(px, py, pz, nx, ny, nz);
+        }
+      }
+    }
+  });
+
+  /* ====================================================================
+     ENGINE — PYRAMID  (square pyramid: 4 flat triangular sides + a base,
+     each face flat-shaded by its own constant normal so faces read at
+     distinct brightness; rotated so it is unmistakably a pyramid).
+     ==================================================================== */
+  var Pyramid = makeSolid({
+    modelScale: 1.8, K2: 5.0, rA: 0.0, rB: 0.78, rC: 0.0, tiltA: -0.45,
+    lx: 0.34, ly: 0.40, lz: 0.85, ambient: 0.15,
+    sample: function (emit) {
+      var hb = 1.0;                 // half base
+      var ay = 1.25;                // apex height (above centre)
+      var by = -0.6;                // base y
+      var apex = [0, ay, 0];
+      // 4 base corners (CCW)
+      var c = [
+        [-hb, by, -hb], [hb, by, -hb], [hb, by, hb], [-hb, by, hb]
+      ];
+      var N = 60;
+      // helper: fill a triangle (p0 apex, p1,p2 base edge) with a flat normal
+      function face(p0, p1, p2) {
+        // face normal = normalize(cross(p1-p0, p2-p0)), outward
+        var ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+        var vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+        var nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        var nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+        // ensure outward (point away from origin)
+        var cx = (p0[0] + p1[0] + p2[0]) / 3, cy = (p0[1] + p1[1] + p2[1]) / 3, cz = (p0[2] + p1[2] + p2[2]) / 3;
+        if (nx * cx + ny * cy + nz * cz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        for (var i = 0; i < N; i++) {
+          var fi = i / (N - 1);
+          for (var j = 0; j <= i; j++) {
+            var fj = i ? j / i : 0;
+            // barycentric across the triangle
+            var w0 = 1 - fi, w1 = fi * (1 - fj), w2 = fi * fj;
+            var x = p0[0] * w0 + p1[0] * w1 + p2[0] * w2;
+            var y = p0[1] * w0 + p1[1] * w1 + p2[1] * w2;
+            var z = p0[2] * w0 + p1[2] * w1 + p2[2] * w2;
+            emit(x, y, z, nx, ny, nz);
+          }
+        }
+      }
+      face(apex, c[0], c[1]);
+      face(apex, c[1], c[2]);
+      face(apex, c[2], c[3]);
+      face(apex, c[3], c[0]);
+      // base (two triangles), normal points down
+      face(c[0], c[2], c[1]);
+      face(c[0], c[3], c[2]);
+    }
+  });
 
   /* ====================================================================
      ENGINE 2 — MATRIX  (vertical falling-glyph columns)
@@ -3363,6 +3649,10 @@
     reseed();
     Matrix.reset();
     Donut.reset();
+    Cube.reset();
+    Sphere.reset();
+    TorusKnot.reset();
+    Pyramid.reset();
     Life.reset();
     Fire.reset();
     Starfield.reset();
@@ -3534,6 +3824,10 @@
     }
     else if (state.mode === 'image')   Image_.render(dt);
     else if (state.engine === 'donut') Donut.render(dt * sp, tiltX, tiltY);
+    else if (state.engine === 'cube') Cube.render(dt * sp, tiltX, tiltY);
+    else if (state.engine === 'sphere') Sphere.render(dt * sp, tiltX, tiltY);
+    else if (state.engine === 'torusknot') TorusKnot.render(dt * sp, tiltX, tiltY);
+    else if (state.engine === 'pyramid') Pyramid.render(dt * sp, tiltX, tiltY);
     else if (state.engine === 'matrix') Matrix.render(dt * sp);
     else if (state.engine === 'plasma') Plasma.render(dt * sp);
     else if (state.engine === 'life')   Life.render(dt);
@@ -3602,6 +3896,14 @@
     } else if (state.engine === 'donut') {
       Donut.setTime(1.2);       // fixed absolute time -> stable A,B
       Donut.render(0, tiltX, tiltY);
+    } else if (state.engine === 'cube') {
+      Cube.setTime(1.2); Cube.render(0, tiltX, tiltY);
+    } else if (state.engine === 'sphere') {
+      Sphere.setTime(1.2); Sphere.render(0, tiltX, tiltY);
+    } else if (state.engine === 'torusknot') {
+      TorusKnot.setTime(1.2); TorusKnot.render(0, tiltX, tiltY);
+    } else if (state.engine === 'pyramid') {
+      Pyramid.setTime(1.2); Pyramid.render(0, tiltX, tiltY);
     } else if (state.engine === 'matrix') {
       Matrix.reset();           // re-prime the full-height field
       Matrix.render(0.4);       // larger settle step advances heads into view
