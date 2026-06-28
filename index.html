@@ -204,6 +204,13 @@
     transition:color .12s ease, border-color .12s ease;
   }
   .credit a:hover{ color:var(--neon); border-color:var(--neon); }
+  /* COLOUR tiles each show a swatch bar of the palette's REAL colour/gradient */
+  .seg.colour .tab{ padding-bottom:13px; }
+  .seg.colour .cswatch{
+    position:absolute; left:7px; right:7px; bottom:6px; height:4px;
+    border-radius:2px; z-index:1; pointer-events:none;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.28);
+  }
   /* narrow desktop windows shrink the rail (it clamps to its 224px min) → shrink the
      tile text a touch so 8-char labels (standard/phosphor/spectrum/Generative) never clip. */
   @media (min-width:681px) and (max-width:1120px){
@@ -1178,6 +1185,11 @@
         <button class="tab" data-ramp="binary" type="button" aria-pressed="false" aria-label="binary ramp">binary</button>
         <button class="tab" data-ramp="donut" type="button" aria-pressed="false" aria-label="donut ramp">donut</button>
         <button class="tab" data-ramp="photo" type="button" aria-pressed="false" aria-label="photo ramp">photo</button>
+        <button class="tab" data-ramp="bars" type="button" aria-pressed="false" aria-label="bars ramp">bars</button>
+        <button class="tab" data-ramp="shade" type="button" aria-pressed="false" aria-label="shade ramp">shade</button>
+        <button class="tab" data-ramp="braille" type="button" aria-pressed="false" aria-label="braille ramp">braille</button>
+        <button class="tab" data-ramp="stars" type="button" aria-pressed="false" aria-label="stars ramp">stars</button>
+        <button class="tab" data-ramp="circles" type="button" aria-pressed="false" aria-label="circles ramp">circles</button>
       </div>
     </div>
 
@@ -1295,7 +1307,12 @@
     // dense Paul Bourke-style 70-level grayscale ramp (dark -> bright). Leading
     // space => index 0 is blank; the long smooth gradient resolves photographic
     // tone instead of the few coarse steps a short ramp gives.
-    photo:    ' .\'`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$'
+    photo:    ' .\'`^",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
+    bars:     ' ▁▂▃▄▅▆▇█',
+    shade:    ' ░▒▓█',
+    braille:  ' ⠁⠃⠇⡇⡏⡟⡿⣿',
+    stars:    ' .·*✦★',
+    circles:  ' .·∘○●'
   };
 
   // the solid full block — forced for every face + side cell of the 3D word
@@ -5385,6 +5402,23 @@
 
   /* ---------- LOOKS / ACTIONS / EXPORT wiring ---------- */
   buildLookSwatches();          // upgrade the LOOK buttons into character swatches
+  function buildColourSwatches() {   // tint each COLOUR tile with a swatch of its real palette
+    if (!segColour) return;
+    var btns = segColour.querySelectorAll('[data-colour]');
+    for (var i = 0; i < btns.length; i++) {
+      var name = btns[i].getAttribute('data-colour');
+      var C = COLOURS[name]; if (!C) continue;
+      var sw = btns[i].querySelector('.cswatch');
+      if (!sw) { sw = document.createElement('span'); sw.className = 'cswatch'; sw.setAttribute('aria-hidden', 'true'); btns[i].appendChild(sw); }
+      if (C.grad && C.stops) {
+        var parts = [];
+        for (var j = 0; j < C.stops.length; j++) { var s = C.stops[j]; parts.push('rgb(' + s[0] + ',' + s[1] + ',' + s[2] + ')'); }
+        sw.style.background = 'linear-gradient(90deg,' + parts.join(',') + ')';
+      } else if (C.paper) { sw.style.background = '#e4e6e0'; }
+      else { sw.style.background = 'rgb(' + C.ink[0] + ',' + C.ink[1] + ',' + C.ink[2] + ')'; }
+    }
+  }
+  buildColourSwatches();
   if (segLooks) segLooks.addEventListener('click', function (e) {
     var btn = e.target.closest('button');
     if (!btn || !btn.dataset.look) return;
