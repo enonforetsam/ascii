@@ -21,11 +21,14 @@ var SEC = {
   'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
   'content-security-policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    // 'unsafe-inline': the studio is one inline <script> in index.html (single-file
+    // by design). static.cloudflareinsights.com: Cloudflare Web Analytics beacon ~
+    // without it the beacon is blocked and the console shows a CSP error on every load.
+    "script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    "connect-src 'self' https://cloudflareinsights.com https://static.cloudflareinsights.com",
     "worker-src 'self' blob:",
     "frame-ancestors *",
     "base-uri 'self'",

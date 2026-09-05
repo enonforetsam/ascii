@@ -1,8 +1,7 @@
 {
   "name": "ascii",
   "version": "0.0.1",
-  "private": true,
-  "description": "everything is characters — a text-native generative art instrument",
+  "description": "Everything is characters ~ a text-native generative art instrument. 12 engines, three modes, any charset, one HTML file.",
   "scripts": {
     "dev": "npx wrangler dev",
     "deploy": "npx wrangler deploy",
@@ -11,5 +10,11 @@
   },
   "dependencies": {
     "puppeteer-core": "^25.2.1"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enonforetsam/ascii"
+  },
+  "homepage": "https://ascii.krackeddevs.com"
 }

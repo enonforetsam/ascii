@@ -1,0 +1,4 @@
+- [ ] `npm test` passes
+- [ ] I opened `index.html` and stepped through every engine and mode once
+- [ ] Share link showing the change: 
+- [ ] If the share hash changed: fields were appended, never reordered, and `worker.js` mirrors it
